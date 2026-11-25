@@ -69,6 +69,14 @@ async function render() {
   }));
 }
 
+// "Install app" / offline panel. The label says Install when this browser can install the site.
+import('./pwa.js').then(({ openAppPanel, canInstall, onPwaChange }) => {
+  const b = $('#appBtn'); if (!b) return;
+  const label = () => { b.hidden = false; b.textContent = canInstall() ? 'Install app' : 'App & offline'; b.classList.toggle('primary-soft', canInstall()); };
+  b.onclick = openAppPanel;
+  onPwaChange(label); label();
+}).catch(() => {});
+
 // A file exported from this site: its build has our own shape (boosts, feats by slot, choices).
 const isOwnExport = (d) => !!(d && d.build && (d.format === 'pf2e-builder' || (d.build.boosts && d.build.feats && !Array.isArray(d.build.feats) && typeof d.build.abilities !== 'object')));
 

@@ -968,3 +968,19 @@ input[type=text], input[type=number], input[type=email], input[type=password], i
   .il-row > .il-qty { grid-area: qty; justify-content: flex-start; }
   .il-row > .il-where { grid-area: where; }
 }
+
+/* ============================================================ app (install, offline, updates) */
+.sw-update { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 90; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 24px); padding: 10px 12px 10px 16px; border-radius: 14px; background: var(--panel2); border: 1px solid var(--accent-line); box-shadow: 0 10px 30px rgba(0, 0, 0, .45); }
+.app-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 0; border-top: 1px solid var(--line); }
+.app-row:first-child { border-top: 0; padding-top: 0; }
+.app-row p { margin: 2px 0 0; }
+.app-row > div { flex: 1; min-width: 0; }
+.ok-badge { background: var(--ok-soft, rgba(80, 200, 120, .14)); color: var(--ok); border: 1px solid rgba(80, 200, 120, .35); }
+.app-progress { height: 6px; margin-top: 8px; border-radius: 3px; background: rgba(255, 255, 255, .08); overflow: hidden; }
+.app-progress > div { width: 0; height: 100%; background: var(--accent); transition: width .2s; }
+.btn.primary-soft { border-color: var(--accent-line); color: var(--accent); }
+/* Installed app: keep clear of the phone/tablet notch and home bar */
+@media (display-mode: standalone) {
+  .topbar { padding-top: env(safe-area-inset-top, 0px); }
+  body { padding-bottom: env(safe-area-inset-bottom, 0px); }
+}
