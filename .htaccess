@@ -23,3 +23,6 @@
   Header always set Referrer-Policy "same-origin"
 </IfModule>
 Options -Indexes
+
+# The site deploys from GitHub: never serve Git files (.git folder, .gitignore)
+RedirectMatch 404 /\.git
