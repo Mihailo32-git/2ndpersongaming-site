@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#12151b">
+<title>Set a new password — PF2e Characters</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22%3E%3Crect width=%2224%22 height=%2224%22 rx=%225%22 fill=%22%2312151b%22/%3E%3Cg fill=%22none%22 stroke=%22%234fb8e8%22 stroke-width=%222%22%3E%3Cpath d=%22M12 3l7 4.5v9L12 21l-7-4.5v-9z%22/%3E%3Cpath d=%22M12 7.5v9M8 10l8 4M16 10l-8 4%22/%3E%3C/g%3E%3C/svg%3E">
+<link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="index.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4fb8e8" stroke-width="2" aria-hidden="true"><path d="M12 2l8 5v10l-8 5-8-5V7z"/><path d="M12 7v10M7 9.5l10 5M17 9.5l-10 5"/></svg><span>PF2e Characters</span></a>
+  <nav class="nav" aria-label="Main"><a href="index.html">Characters</a></nav>
+  <span class="spacer"></span>
+</header>
+<main class="wrap narrow-wrap" id="main"><p class="muted">Loading…</p></main>
+<footer class="footer">
+  Uses trademarks and/or copyrights owned by Paizo Inc., used under Paizo's Community Use Policy
+  (<a href="https://paizo.com/licenses/communityuse" target="_blank" rel="noopener">paizo.com/licenses/communityuse</a>).
+  We are expressly prohibited from charging you to use or access this content. This site is not published, endorsed,
+  or specifically approved by Paizo. For more information about Paizo Inc. and Paizo products, visit
+  <a href="https://paizo.com" target="_blank" rel="noopener">paizo.com</a>.
+  Rules data from the <a href="https://github.com/foundryvtt/pf2e" target="_blank" rel="noopener">Foundry VTT PF2e system</a> (OGL 1.0a / ORC). <a href="licenses.html">Licenses</a>.
+</footer>
+<script>
+/* Shows a message instead of an endless "Loading…" if the app can't start (e.g. an old cached file). */
+(function () {
+  function stuck() { var m = document.getElementById('main') || document.getElementById('list'); return m && m.children.length === 1 && /Loading/.test(m.textContent) ? m : null; }
+  function fail(why) {
+    var m = stuck(); if (!m) return;
+    m.innerHTML = '<div class="card"><p class="bad"><b>The page didn\u2019t start.</b> ' + why + '</p><p>Your browser may be holding on to an older copy of the site. Do a hard refresh: <b>Ctrl+Shift+R</b> (Windows), <b>Cmd+Shift+R</b> (Mac), or clear this site\u2019s cached files on your phone.</p><button type="button" class="btn primary" onclick="location.reload()">Reload</button></div>';
+  }
+  window.addEventListener('error', function (e) { if (e && e.message) fail(String(e.message).replace(/</g, '&lt;')); });
+  setTimeout(function () { fail('It is taking unusually long to load.'); }, 30000);
+})();
+</script>
+<script type="module" src="js/reset.js"></script>
+</body>
+</html>

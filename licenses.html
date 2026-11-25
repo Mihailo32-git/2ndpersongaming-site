@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Licenses — PF2e Characters</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22%3E%3Crect width=%2224%22 height=%2224%22 rx=%225%22 fill=%22%2312151b%22/%3E%3Cg fill=%22none%22 stroke=%22%234fb8e8%22 stroke-width=%222%22%3E%3Cpath d=%22M12 3l7 4.5v9L12 21l-7-4.5v-9z%22/%3E%3Cpath d=%22M12 7.5v9M8 10l8 4M16 10l-8 4%22/%3E%3C/g%3E%3C/svg%3E">
+<meta name="theme-color" content="#12151b">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="index.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4fb8e8" stroke-width="2" aria-hidden="true"><path d="M12 2l8 5v10l-8 5-8-5V7z"/><path d="M12 7v10M7 9.5l10 5M17 9.5l-10 5"/></svg><span>PF2e Characters</span></a>
+  <nav class="nav" aria-label="Main"><a href="index.html">Characters</a><a href="licenses.html" aria-current="page">Licenses</a></nav>
+</header>
+<main class="wrap">
+  <div class="card">
+    <h1>Licenses &amp; legal</h1>
+    <p>This site uses trademarks and/or copyrights owned by Paizo Inc., used under Paizo's Community Use Policy
+    (<a href="https://paizo.com/licenses/communityuse" target="_blank" rel="noopener">paizo.com/licenses/communityuse</a>).
+    We are expressly prohibited from charging you to use or access this content. This site is not published, endorsed, or
+    specifically approved by Paizo. For more information about Paizo Inc. and Paizo products, visit <a href="https://paizo.com">paizo.com</a>.</p>
+    <p>Game rules text and mechanics come from the <a href="https://github.com/foundryvtt/pf2e">Foundry VTT Pathfinder Second Edition system</a>
+    data and are used under the Open Game License 1.0a and the ORC License. Each entry shows which license it is under and the book it comes from.
+    Parts of the rules logic are adapted from the Foundry PF2e code, which is licensed under the Apache License 2.0. No artwork is used. The Inter and JetBrains Mono fonts are served from this site under the SIL Open Font License.
+    The Pathbuilder import uses a table of Pathbuilder-to-Foundry name differences from <a href="https://github.com/MrPrimate/pathmuncher" target="_blank" rel="noopener">Pathmuncher</a> (MIT License). Pathbuilder 2e is a separate app and isn't connected to this site.</p>
+    <div class="row"><button class="btn" data-f="ORCLicense.md">ORC License &amp; attribution</button>
+      <button class="btn" data-f="OpenGameLicense.md">Open Game License 1.0a</button>
+      <button class="btn" data-f="Foundry-PF2e-Apache-2.0.txt">Apache License 2.0</button>
+      <button class="btn" data-f="Pathmuncher-MIT.txt">Pathmuncher (MIT)</button>
+      <button class="btn" data-f="../fonts/Inter-OFL.txt">Inter font (OFL)</button>
+      <button class="btn" data-f="../fonts/JetBrainsMono-OFL.txt">JetBrains Mono font (OFL)</button></div>
+  </div>
+  <div class="card"><pre id="lic" style="white-space:pre-wrap;font-size:13px;color:var(--ink2)">Choose a license above.</pre></div>
+</main>
+<script>
+document.querySelectorAll('[data-f]').forEach(function (b) {
+  b.onclick = function () {
+    fetch('licenses/' + b.dataset.f).then(function (r) { return r.text(); }).then(function (t) { document.getElementById('lic').textContent = t; });
+  };
+});
+</script>
+</body>
+</html>

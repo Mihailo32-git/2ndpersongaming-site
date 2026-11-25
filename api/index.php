@@ -1,0 +1,453 @@
+<?php
+/**
+ * PF2e Builder API — accounts and character storage.
+ * All responses are JSON. POST requests must send the header "X-PF2E: 1" (blocks cross-site form posts).
+ * The database tables are created on the first request, so setting up only needs an empty database and config.php.
+ *
+ * Routes (?r=...):
+ *   GET  status                 is the server set up, can people sign up, can it send email
+ *   GET  me                     current user or null
+ *   POST register {email,name,password[,invite]}
+ *   POST login    {email,password}
+ *   POST logout
+ *   POST forgot   {email}                    email a password-reset link (always answers ok)
+ *   POST reset    {token,password}           set a new password from that link, logs you in
+ *   POST account  {name?, current?, password?}   change display name and/or password
+ *   POST delete_account {password}           delete the account and all its characters
+ *   GET  characters             list of your characters
+ *   GET  character&id=N         one character (build + state + version)
+ *   POST character {id?,name,build,state?,version?,force?}  create or update (state only replaced when sent);
+ *                                            409 if another device saved a newer version since `version`
+ *   POST character_state {id,state}         save live sheet state only
+ *   POST delete {id}
+ *   POST share {id,on}          turn a read-only share link on/off
+ *   GET  shared&token=T         read-only shared character
+ */
+declare(strict_types=1);
+
+// Where app/ (config.php, sessions) lives. Keep it outside public_html. Options, in order:
+//  1. api/app-path.php that returns the absolute path, e.g. <?php return '/home/u123/domains/example.com/pf2e-app';
+//  2. the PF2E_APP_DIR environment variable
+//  3. ../../app relative to this file
+$appDir = is_file(__DIR__ . '/app-path.php') ? (require __DIR__ . '/app-path.php') : (getenv('PF2E_APP_DIR') ?: dirname(__DIR__, 2) . '/app');
+
+header('Content-Type: application/json; charset=utf-8');
+header('X-Content-Type-Options: nosniff');
+header('Cache-Control: no-store');
+
+function fail(int $code, string $msg, array $extra = []): never {
+    http_response_code($code);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['error' => $msg] + $extra, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+function ok(array $data): never {
+    echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+if (!is_file("$appDir/config.php")) {
+    // Not set up yet: the site keeps working with characters saved in the browser.
+    if (($_GET['r'] ?? '') === 'status') ok(['configured' => false]);
+    fail(503, 'Accounts are not set up on this server yet');
+}
+$config = require "$appDir/config.php";
+
+// Sessions: kept in app/sessions for 60 days, so players stay logged in on their tablets.
+$https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+$lifetime = 60 * 60 * 24 * 60;
+$sessDir = "$appDir/sessions";
+if (!is_dir($sessDir)) @mkdir($sessDir, 0700, true);
+if (is_dir($sessDir) && is_writable($sessDir)) session_save_path($sessDir);
+ini_set('session.gc_maxlifetime', (string)$lifetime);
+ini_set('session.use_strict_mode', '1');
+session_set_cookie_params(['lifetime' => $lifetime, 'path' => '/', 'secure' => $https, 'httponly' => true, 'samesite' => 'Lax']);
+session_name('pf2e_sid');
+session_start();
+// Keep the cookie alive while the player keeps using the site.
+if (!empty($_SESSION['uid']) && (empty($_SESSION['renewed']) || $_SESSION['renewed'] < time() - 86400)) {
+    $_SESSION['renewed'] = time();
+    setcookie(session_name(), session_id(), ['expires' => time() + $lifetime, 'path' => '/', 'secure' => $https, 'httponly' => true, 'samesite' => 'Lax']);
+}
+
+function isSqlite(): bool { global $config; return str_starts_with((string)$config['db_dsn'], 'sqlite:'); }
+function db(): PDO {
+    static $pdo = null;
+    global $config;
+    if ($pdo) return $pdo;
+    try {
+        $pdo = new PDO($config['db_dsn'], $config['db_user'] ?? null, $config['db_pass'] ?? null, [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]);
+    } catch (PDOException $e) {
+        error_log('PF2e API DB error: ' . $e->getMessage());
+        fail(500, 'Database connection failed');
+    }
+    if (isSqlite()) $pdo->exec('PRAGMA foreign_keys = ON');
+    ensureSchema($pdo);
+    return $pdo;
+}
+
+/** Creates or upgrades the tables. Schema 2: character versions, password resets, attempt kinds. */
+function ensureSchema(PDO $pdo): void {
+    $want = '2';
+    try {
+        $v = $pdo->query("SELECT v FROM app_meta WHERE k = 'schema'")->fetchColumn();
+        if ($v === $want) return;
+    } catch (PDOException $e) { /* first run */ }
+    $lite = isSqlite();
+    $ddl = $lite ? [
+        "CREATE TABLE IF NOT EXISTS app_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL DEFAULT '', password_hash TEXT NOT NULL, created_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS characters (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, name TEXT NOT NULL DEFAULT '', level INTEGER NOT NULL DEFAULT 1, class TEXT NOT NULL DEFAULT '', ancestry TEXT NOT NULL DEFAULT '', heritage TEXT NOT NULL DEFAULT '', build TEXT NOT NULL, state TEXT NOT NULL, share_token TEXT NULL UNIQUE, version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+        "CREATE INDEX IF NOT EXISTS idx_user ON characters(user_id)",
+        "CREATE TABLE IF NOT EXISTS login_attempts (ip TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'login', attempted_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS password_resets (token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at TEXT NOT NULL)",
+    ] : [
+        "CREATE TABLE IF NOT EXISTS app_meta (k VARCHAR(40) NOT NULL PRIMARY KEY, v VARCHAR(255) NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE IF NOT EXISTS users (id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, email VARCHAR(190) NOT NULL UNIQUE, name VARCHAR(100) NOT NULL DEFAULT '', password_hash VARCHAR(255) NOT NULL, created_at DATETIME NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        "CREATE TABLE IF NOT EXISTS characters (id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, name VARCHAR(120) NOT NULL DEFAULT '', level TINYINT UNSIGNED NOT NULL DEFAULT 1, class VARCHAR(60) NOT NULL DEFAULT '', ancestry VARCHAR(80) NOT NULL DEFAULT '', heritage VARCHAR(80) NOT NULL DEFAULT '', build MEDIUMTEXT NOT NULL, state MEDIUMTEXT NOT NULL, share_token VARCHAR(40) NULL UNIQUE, version INT UNSIGNED NOT NULL DEFAULT 1, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, INDEX idx_user (user_id), CONSTRAINT fk_char_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        "CREATE TABLE IF NOT EXISTS login_attempts (ip VARCHAR(45) NOT NULL, kind VARCHAR(10) NOT NULL DEFAULT 'login', attempted_at DATETIME NOT NULL, INDEX idx_ip_time (ip, attempted_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE IF NOT EXISTS password_resets (token_hash CHAR(64) NOT NULL PRIMARY KEY, user_id INT UNSIGNED NOT NULL, expires_at DATETIME NOT NULL, INDEX idx_reset_user (user_id), CONSTRAINT fk_reset_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    ];
+    foreach ($ddl as $q) $pdo->exec($q);
+    // Upgrades for databases made from the first schema.sql
+    $hasCol = function (string $table, string $col) use ($pdo): bool {
+        try { $pdo->query("SELECT $col FROM $table LIMIT 1"); return true; } catch (PDOException $e) { return false; }
+    };
+    if (!$hasCol('characters', 'version')) $pdo->exec($lite ? "ALTER TABLE characters ADD COLUMN version INTEGER NOT NULL DEFAULT 1" : "ALTER TABLE characters ADD COLUMN version INT UNSIGNED NOT NULL DEFAULT 1");
+    if (!$hasCol('login_attempts', 'kind')) $pdo->exec($lite ? "ALTER TABLE login_attempts ADD COLUMN kind TEXT NOT NULL DEFAULT 'login'" : "ALTER TABLE login_attempts ADD COLUMN kind VARCHAR(10) NOT NULL DEFAULT 'login'");
+    $pdo->prepare($lite ? "INSERT OR REPLACE INTO app_meta (k, v) VALUES ('schema', ?)" : "REPLACE INTO app_meta (k, v) VALUES ('schema', ?)")->execute([$want]);
+}
+
+function now(int $offset = 0): string { return gmdate('Y-m-d H:i:s', time() + $offset); }
+function body(): array {
+    $raw = file_get_contents('php://input', false, null, 0, 4_000_000);
+    if ($raw === '' || $raw === false) return [];
+    $d = json_decode($raw, true);
+    if (!is_array($d)) fail(400, 'Invalid JSON');
+    return $d;
+}
+function me(): ?array {
+    if (empty($_SESSION['uid'])) return null;
+    $st = db()->prepare('SELECT id, email, name FROM users WHERE id = ?');
+    $st->execute([$_SESSION['uid']]);
+    $u = $st->fetch();
+    return $u ? ['id' => (int)$u['id'], 'email' => $u['email'], 'name' => $u['name']] : null;
+}
+function needUser(): array {
+    $u = me();
+    if (!$u) fail(401, 'Please log in', ['loggedOut' => true]);
+    return $u;
+}
+function logIn(int $uid): void {
+    session_regenerate_id(true);
+    $_SESSION['uid'] = $uid;
+    $_SESSION['renewed'] = time();
+}
+function ip(): string { return substr($_SERVER['REMOTE_ADDR'] ?? 'unknown', 0, 45); }
+function tooMany(string $kind, int $max): bool {
+    $st = db()->prepare('SELECT COUNT(*) FROM login_attempts WHERE ip = ? AND kind = ? AND attempted_at > ?');
+    $st->execute([ip(), $kind, now(-15 * 60)]);
+    return (int)$st->fetchColumn() >= $max;
+}
+function record(string $kind): void {
+    db()->prepare('INSERT INTO login_attempts (ip, kind, attempted_at) VALUES (?, ?, ?)')->execute([ip(), $kind, now()]);
+    if (random_int(1, 50) === 1) db()->prepare('DELETE FROM login_attempts WHERE attempted_at < ?')->execute([now(-86400)]);
+}
+function charSummary(array $build): array {
+    return [
+        'name' => mb_substr((string)($build['name'] ?? 'Unnamed'), 0, 120) ?: 'Unnamed',
+        'level' => max(1, min(20, (int)($build['level'] ?? 1))),
+        'class' => mb_substr((string)($build['class'] ?? ''), 0, 60),
+        'ancestry' => mb_substr((string)($build['ancestry'] ?? ''), 0, 80),
+        'heritage' => mb_substr((string)($build['heritage'] ?? ''), 0, 80),
+    ];
+}
+function ownChar(int $id, int $uid): array {
+    $st = db()->prepare('SELECT * FROM characters WHERE id = ? AND user_id = ?');
+    $st->execute([$id, $uid]);
+    $c = $st->fetch();
+    if (!$c) fail(404, 'Character not found');
+    return $c;
+}
+function iso(string $dt): string { return str_replace(' ', 'T', $dt) . 'Z'; }
+function charOut(array $c): array {
+    return ['id' => (string)$c['id'], 'name' => $c['name'], 'build' => json_decode($c['build'], true), 'state' => json_decode($c['state'], true) ?: new stdClass(),
+        'share_token' => $c['share_token'], 'version' => (int)$c['version'], 'updated' => iso($c['updated_at'])];
+}
+function siteUrl(): string {
+    global $config, $https;
+    if (!empty($config['site_url'])) return rtrim((string)$config['site_url'], '/');
+    $dir = rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'] ?? '/api/index.php')), '/');
+    return ($https ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . $dir;
+}
+function mailFrom(): string {
+    global $config;
+    return (string)($config['mail_from'] ?? $config['smtp_user'] ?? ('noreply@' . preg_replace('/^www\./', '', $_SERVER['HTTP_HOST'] ?? 'localhost')));
+}
+function canMail(): bool { global $config; return !empty($config['smtp_host']) || !empty($config['mail_log']) || !empty($config['use_php_mail']); }
+
+/** Sends a plain-text email via SMTP (config smtp_*), a log file (local testing) or PHP mail(). */
+function sendMail(string $to, string $subject, string $text): bool {
+    global $config;
+    $from = mailFrom();
+    $fromName = (string)($config['mail_from_name'] ?? 'PF2e Characters');
+    if (!empty($config['mail_log'])) {
+        return (bool)file_put_contents($config['mail_log'], "To: $to\nSubject: $subject\n\n$text\n----\n", FILE_APPEND);
+    }
+    $headers = [
+        'From' => "$fromName <$from>", 'Reply-To' => $from, 'MIME-Version' => '1.0',
+        'Content-Type' => 'text/plain; charset=UTF-8', 'Content-Transfer-Encoding' => '8bit',
+        'Date' => date('r'), 'Message-ID' => '<' . bin2hex(random_bytes(12)) . '@' . substr(strrchr($from, '@'), 1) . '>',
+    ];
+    $subjectEnc = '=?UTF-8?B?' . base64_encode($subject) . '?=';
+    if (empty($config['smtp_host'])) {
+        $h = '';
+        foreach ($headers as $k => $v) $h .= "$k: $v\r\n";
+        return mail($to, $subjectEnc, $text, $h, '-f' . $from);
+    }
+    $port = (int)($config['smtp_port'] ?? 465);
+    $secure = $config['smtp_secure'] ?? ($port === 465 ? 'ssl' : 'tls');
+    $ctx = stream_context_create(['ssl' => ['verify_peer' => true, 'verify_peer_name' => true]]);
+    $fp = @stream_socket_client(($secure === 'ssl' ? 'ssl://' : 'tcp://') . $config['smtp_host'] . ':' . $port, $errno, $errstr, 15, STREAM_CLIENT_CONNECT, $ctx);
+    if (!$fp) { error_log("PF2e mail: cannot connect ($errstr)"); return false; }
+    stream_set_timeout($fp, 20);
+    $read = function () use ($fp): string {
+        $out = '';
+        while (($line = fgets($fp, 1024)) !== false) { $out .= $line; if (strlen($line) < 4 || $line[3] === ' ') break; }
+        return $out;
+    };
+    $cmd = function (?string $c, array $codes) use ($fp, $read): string {
+        if ($c !== null) fwrite($fp, $c . "\r\n");
+        $r = $read();
+        if (!in_array((int)substr($r, 0, 3), $codes, true)) throw new RuntimeException(trim(($c && str_starts_with($c, 'AUTH') ? 'AUTH' : (string)$c) . ' -> ' . $r));
+        return $r;
+    };
+    try {
+        $helo = 'EHLO ' . preg_replace('/[^a-z0-9.-]/i', '', $_SERVER['HTTP_HOST'] ?? 'localhost');
+        $cmd(null, [220]);
+        $cmd($helo, [250]);
+        if ($secure === 'tls') { // 'none' only for local testing
+            $cmd('STARTTLS', [220]);
+            if (!stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) throw new RuntimeException('STARTTLS failed');
+            $cmd($helo, [250]);
+        }
+        $cmd('AUTH LOGIN', [334]);
+        $cmd(base64_encode((string)$config['smtp_user']), [334]);
+        $cmd(base64_encode((string)$config['smtp_pass']), [235]);
+        $cmd("MAIL FROM:<$from>", [250]);
+        $cmd("RCPT TO:<$to>", [250, 251]);
+        $cmd('DATA', [354]);
+        $msg = "To: <$to>\r\nSubject: $subjectEnc\r\n";
+        foreach ($headers as $k => $v) $msg .= "$k: $v\r\n";
+        $msg .= "\r\n" . preg_replace('/^\./m', '..', str_replace("\n", "\r\n", str_replace("\r\n", "\n", $text)));
+        $cmd($msg . "\r\n.", [250]);
+        $cmd('QUIT', [221]);
+        fclose($fp);
+        return true;
+    } catch (Throwable $e) {
+        error_log('PF2e mail: ' . $e->getMessage());
+        @fclose($fp);
+        return false;
+    }
+}
+
+$route = $_GET['r'] ?? '';
+$method = $_SERVER['REQUEST_METHOD'];
+if ($method === 'POST') {
+    if (($_SERVER['HTTP_X_PF2E'] ?? '') !== '1') fail(403, 'Missing request header');
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    if ($origin && parse_url($origin, PHP_URL_HOST) !== parse_url('//' . ($_SERVER['HTTP_HOST'] ?? ''), PHP_URL_HOST)) fail(403, 'Cross-site request blocked');
+}
+
+switch ("$method $route") {
+    case 'GET status':
+        db();
+        ok(['configured' => true, 'register' => !empty($config['allow_register']), 'invite' => !empty($config['invite_code']), 'mail' => canMail()]);
+
+    case 'GET me':
+        ok(['user' => me()]);
+
+    case 'POST register':
+        if (empty($config['allow_register'])) fail(403, 'Sign-ups are closed. Ask your GM for an account.');
+        if (tooMany('register', 10)) fail(429, 'Too many sign-ups from here. Try again in 15 minutes.');
+        $b = body();
+        if (!empty($config['invite_code']) && !hash_equals((string)$config['invite_code'], trim((string)($b['invite'] ?? '')))) { record('register'); fail(403, 'Wrong or missing invite code'); }
+        $email = strtolower(trim((string)($b['email'] ?? '')));
+        $pass = (string)($b['password'] ?? '');
+        $name = mb_substr(trim((string)($b['name'] ?? '')), 0, 100);
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 190) fail(400, 'Enter a valid email address');
+        if (strlen($pass) < 8) fail(400, 'Password must be at least 8 characters');
+        if (strlen($pass) > 200) fail(400, 'Password is too long');
+        $st = db()->prepare('SELECT 1 FROM users WHERE email = ?');
+        $st->execute([$email]);
+        if ($st->fetch()) fail(409, 'An account with this email already exists. Log in, or use "Forgot password".');
+        record('register');
+        db()->prepare('INSERT INTO users (email, name, password_hash, created_at) VALUES (?, ?, ?, ?)')
+            ->execute([$email, $name ?: explode('@', $email)[0], password_hash($pass, PASSWORD_DEFAULT), now()]);
+        logIn((int)db()->lastInsertId());
+        ok(['user' => me()]);
+
+    case 'POST login':
+        if (tooMany('login', 10)) fail(429, 'Too many attempts. Try again in 15 minutes.');
+        $b = body();
+        $st = db()->prepare('SELECT id, password_hash FROM users WHERE email = ?');
+        $st->execute([strtolower(trim((string)($b['email'] ?? '')))]);
+        $u = $st->fetch();
+        if (!$u || !password_verify((string)($b['password'] ?? ''), $u['password_hash'])) { record('login'); usleep(400000); fail(401, 'Wrong email or password'); }
+        if (password_needs_rehash($u['password_hash'], PASSWORD_DEFAULT)) db()->prepare('UPDATE users SET password_hash = ? WHERE id = ?')->execute([password_hash((string)$b['password'], PASSWORD_DEFAULT), $u['id']]);
+        logIn((int)$u['id']);
+        ok(['user' => me()]);
+
+    case 'POST logout':
+        $_SESSION = [];
+        session_destroy();
+        setcookie(session_name(), '', ['expires' => time() - 3600, 'path' => '/', 'secure' => $https, 'httponly' => true, 'samesite' => 'Lax']);
+        ok(['ok' => true]);
+
+    case 'POST forgot':
+        if (!canMail()) fail(400, 'This site can\'t send email yet. Ask your GM to reset your password.');
+        if (tooMany('forgot', 5)) fail(429, 'Too many requests. Try again in 15 minutes.');
+        record('forgot');
+        $email = strtolower(trim((string)(body()['email'] ?? '')));
+        $st = db()->prepare('SELECT id, name FROM users WHERE email = ?');
+        $st->execute([$email]);
+        if ($u = $st->fetch()) {
+            $token = bin2hex(random_bytes(32));
+            db()->prepare('DELETE FROM password_resets WHERE user_id = ? OR expires_at < ?')->execute([$u['id'], now()]);
+            db()->prepare('INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES (?, ?, ?)')->execute([hash('sha256', $token), $u['id'], now(3600)]);
+            $link = siteUrl() . '/reset.html#token=' . $token;
+            $sent = sendMail($email, 'Reset your PF2e Characters password',
+                "Hi {$u['name']},\n\nSomeone (hopefully you) asked to reset the password for your PF2e Characters account.\n\nSet a new password here (the link works for one hour):\n$link\n\nIf you didn't ask for this, ignore this email — your password stays the same.\n");
+            if (!$sent) fail(500, 'The email could not be sent. Try again later or ask your GM.');
+        }
+        ok(['ok' => true]);
+
+    case 'POST reset':
+        if (tooMany('reset', 20)) fail(429, 'Too many attempts. Try again in 15 minutes.');
+        $b = body();
+        $token = (string)($b['token'] ?? '');
+        $pass = (string)($b['password'] ?? '');
+        if (strlen($pass) < 8) fail(400, 'Password must be at least 8 characters');
+        if (strlen($pass) > 200) fail(400, 'Password is too long');
+        $st = db()->prepare('SELECT user_id FROM password_resets WHERE token_hash = ? AND expires_at > ?');
+        $st->execute([hash('sha256', $token), now()]);
+        $uid = $st->fetchColumn();
+        if (!$uid) { record('reset'); fail(400, 'This reset link has expired or was already used. Ask for a new one.'); }
+        db()->prepare('UPDATE users SET password_hash = ? WHERE id = ?')->execute([password_hash($pass, PASSWORD_DEFAULT), $uid]);
+        db()->prepare('DELETE FROM password_resets WHERE user_id = ?')->execute([$uid]);
+        logIn((int)$uid);
+        ok(['user' => me()]);
+
+    case 'POST account':
+        $u = needUser();
+        $b = body();
+        if (isset($b['name'])) {
+            $name = mb_substr(trim((string)$b['name']), 0, 100);
+            if ($name === '') fail(400, 'Enter a name');
+            db()->prepare('UPDATE users SET name = ? WHERE id = ?')->execute([$name, $u['id']]);
+        }
+        if (isset($b['password'])) {
+            $st = db()->prepare('SELECT password_hash FROM users WHERE id = ?');
+            $st->execute([$u['id']]);
+            if (!password_verify((string)($b['current'] ?? ''), (string)$st->fetchColumn())) { record('login'); fail(401, 'Your current password is wrong'); }
+            if (strlen((string)$b['password']) < 8) fail(400, 'New password must be at least 8 characters');
+            db()->prepare('UPDATE users SET password_hash = ? WHERE id = ?')->execute([password_hash((string)$b['password'], PASSWORD_DEFAULT), $u['id']]);
+            session_regenerate_id(true);
+        }
+        ok(['user' => me()]);
+
+    case 'POST delete_account':
+        $u = needUser();
+        $st = db()->prepare('SELECT password_hash FROM users WHERE id = ?');
+        $st->execute([$u['id']]);
+        if (!password_verify((string)(body()['password'] ?? ''), (string)$st->fetchColumn())) { record('login'); fail(401, 'Wrong password'); }
+        db()->prepare('DELETE FROM characters WHERE user_id = ?')->execute([$u['id']]);
+        db()->prepare('DELETE FROM password_resets WHERE user_id = ?')->execute([$u['id']]);
+        db()->prepare('DELETE FROM users WHERE id = ?')->execute([$u['id']]);
+        $_SESSION = [];
+        session_destroy();
+        ok(['ok' => true]);
+
+    case 'GET characters':
+        $u = needUser();
+        $st = db()->prepare('SELECT id, name, level, class, ancestry, heritage, version, updated_at FROM characters WHERE user_id = ? ORDER BY updated_at DESC');
+        $st->execute([$u['id']]);
+        ok(['characters' => array_map(fn($c) => ['id' => (string)$c['id'], 'name' => $c['name'], 'level' => (int)$c['level'], 'class' => $c['class'], 'ancestry' => $c['ancestry'], 'heritage' => $c['heritage'], 'version' => (int)$c['version'], 'updated' => iso($c['updated_at'])], $st->fetchAll())]);
+
+    case 'GET character':
+        $u = needUser();
+        ok(['character' => charOut(ownChar((int)($_GET['id'] ?? 0), $u['id']))]);
+
+    case 'POST character':
+        $u = needUser();
+        $b = body();
+        if (!isset($b['build']) || !is_array($b['build'])) fail(400, 'Missing build');
+        $sum = charSummary($b['build']);
+        $build = json_encode($b['build'], JSON_UNESCAPED_UNICODE);
+        $state = json_encode($b['state'] ?? new stdClass(), JSON_UNESCAPED_UNICODE);
+        $id = (int)($b['id'] ?? 0);
+        if ($id) {
+            $c = ownChar($id, $u['id']);
+            // Another device saved since this one loaded the character: ask before overwriting.
+            if (isset($b['version']) && empty($b['force']) && (int)$b['version'] !== (int)$c['version']) {
+                fail(409, 'This character was changed on another device', ['conflict' => true, 'version' => (int)$c['version'], 'updated' => iso($c['updated_at'])]);
+            }
+            $ver = (int)$c['version'] + 1;
+            // The live sheet state (HP, conditions…) has its own route; only replace it here when it was sent.
+            if (array_key_exists('state', $b)) {
+                db()->prepare('UPDATE characters SET name=?, level=?, class=?, ancestry=?, heritage=?, build=?, state=?, version=?, updated_at=? WHERE id=? AND user_id=?')
+                    ->execute([$sum['name'], $sum['level'], $sum['class'], $sum['ancestry'], $sum['heritage'], $build, $state, $ver, now(), $id, $u['id']]);
+            } else {
+                db()->prepare('UPDATE characters SET name=?, level=?, class=?, ancestry=?, heritage=?, build=?, version=?, updated_at=? WHERE id=? AND user_id=?')
+                    ->execute([$sum['name'], $sum['level'], $sum['class'], $sum['ancestry'], $sum['heritage'], $build, $ver, now(), $id, $u['id']]);
+            }
+        } else {
+            $st = db()->prepare('SELECT COUNT(*) FROM characters WHERE user_id = ?');
+            $st->execute([$u['id']]);
+            if ((int)$st->fetchColumn() >= 200) fail(400, 'Character limit reached');
+            $ver = 1;
+            db()->prepare('INSERT INTO characters (user_id, name, level, class, ancestry, heritage, build, state, version, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+                ->execute([$u['id'], $sum['name'], $sum['level'], $sum['class'], $sum['ancestry'], $sum['heritage'], $build, $state, $ver, now(), now()]);
+            $id = (int)db()->lastInsertId();
+        }
+        ok(['id' => (string)$id, 'version' => $ver, 'updated' => iso(now())]);
+
+    case 'POST character_state':
+        $u = needUser();
+        $b = body();
+        $id = (int)($b['id'] ?? 0);
+        ownChar($id, $u['id']);
+        db()->prepare('UPDATE characters SET state=?, updated_at=? WHERE id=? AND user_id=?')
+            ->execute([json_encode($b['state'] ?? new stdClass(), JSON_UNESCAPED_UNICODE), now(), $id, $u['id']]);
+        ok(['ok' => true]);
+
+    case 'POST delete':
+        $u = needUser();
+        $b = body();
+        db()->prepare('DELETE FROM characters WHERE id=? AND user_id=?')->execute([(int)($b['id'] ?? 0), $u['id']]);
+        ok(['ok' => true]);
+
+    case 'POST share':
+        $u = needUser();
+        $b = body();
+        $c = ownChar((int)($b['id'] ?? 0), $u['id']);
+        $token = !empty($b['on']) ? ($c['share_token'] ?: bin2hex(random_bytes(16))) : null;
+        db()->prepare('UPDATE characters SET share_token=? WHERE id=?')->execute([$token, $c['id']]);
+        ok(['share_token' => $token]);
+
+    case 'GET shared':
+        $t = (string)($_GET['token'] ?? '');
+        if (!preg_match('/^[a-f0-9]{32}$/', $t)) fail(404, 'Link not valid');
+        $st = db()->prepare('SELECT * FROM characters WHERE share_token = ?');
+        $st->execute([$t]);
+        $c = $st->fetch();
+        if (!$c) fail(404, 'This sheet is no longer shared');
+        $out = charOut($c);
+        unset($out['share_token']);
+        ok(['character' => $out]);
+
+    default:
+        fail(404, 'Unknown route');
+}
