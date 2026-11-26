@@ -40,16 +40,22 @@ export function newBuild() {
 }
 
 /** Fills in fields added in newer versions, so old saved characters keep working. */
+/** A map that may have come back from the server as a list ({} saved as [], {"0":…} as […]). */
+export const asObj = (v) => (v && typeof v === 'object' ? (Array.isArray(v) ? Object.assign({}, v) : v) : {});
+
 export function normalizeBuild(b0) {
   const d = newBuild();
   const b = Object.assign(newBuild(), b0 || {});
-  b.options = Object.assign(d.options, b.options || {});
-  b.boosts = Object.assign(d.boosts, b.boosts || {});
-  b.skills = Object.assign(d.skills, b.skills || {});
-  b.spells = Object.assign(d.spells, b.spells || {});
-  if (Array.isArray(b.spells.sig)) b.spells.sig = {};
-  b.details = Object.assign(d.details, b.details || {});
-  b.feats = b.feats || {}; b.choices = b.choices || {}; b.inventory = b.inventory || []; b.formulas = b.formulas || []; b.languages = b.languages || [];
+  b.options = Object.assign(d.options, asObj(b.options));
+  b.boosts = Object.assign(d.boosts, asObj(b.boosts));
+  b.skills = Object.assign(d.skills, asObj(b.skills));
+  b.skills.int = asObj(b.skills.int); b.skills.inc = asObj(b.skills.inc);
+  b.spells = Object.assign(d.spells, asObj(b.spells));
+  for (const k of ['rep', 'sig', 'book', 'arch', 'pick', 'innate']) b.spells[k] = asObj(b.spells[k]);
+  for (const a of Object.values(b.spells.arch)) if (a && typeof a === 'object') { if ('rep' in a) a.rep = asObj(a.rep); if ('book' in a) a.book = asObj(a.book); }
+  b.details = Object.assign(d.details, asObj(b.details));
+  b.feats = asObj(b.feats); b.choices = asObj(b.choices);
+  for (const [k, v] of Object.entries(b.choices)) if (Array.isArray(v) && !v.length) b.choices[k] = {}; b.inventory = b.inventory || []; b.formulas = b.formulas || []; b.languages = b.languages || [];
   b.companions = Array.isArray(b.companions) ? b.companions : [];
   return b;
 }
@@ -392,7 +398,7 @@ export class Engine {
     }
     if (r.key === 'RollOption') {
       if (r.option && !r.toggleable && test(this._subst(r.predicate || [], ch, inst), ch.options)) ch.options.add(this._subst(r.option, ch, inst));
-      return;
+      if (!r.strikeToggle) return; // strike switches are kept: the sheet shows them above Strikes
     }
     ch.rules.push({ r, inst });
   }
@@ -555,6 +561,13 @@ export class Engine {
       m = path.match(/^actor\.(?:system\.)?attributes\.(\w+)\.mod$/);
       if (m) return ch.attrs?.[m[1]] ?? 0;
       if (path === 'item.level') return inst?.rec?.level ?? 0;
+      const w = this._weaponCtx;
+      if (w) {
+        if (path === 'weapon.level' || path === 'weapon.system.level.value') return w.level;
+        if (path === 'weapon.system.damage.dice') return w.dice;
+        if (path === 'weapon.system.runes.potency') return w.potency;
+        if (path === 'weapon.system.splashDamage.value') return w.splash;
+      }
       if (path === 'item.badge.value') return 1;
       return 0;
     };
@@ -778,6 +791,8 @@ export class Engine {
       }
       if (!value) continue;
       const mod = { label: r.label || inst.rec.name, value, type: r.type || 'untyped', source: inst.rec.name };
+      if (r.damageType && typeof r.damageType === 'string' && !r.damageType.includes('{')) mod.damageType = r.damageType;
+      if (r.damageCategory) mod.category = r.damageCategory;
       if (r.predicate && r.predicate.length) {
         if (test(this._subst(r.predicate, ch, inst), opts)) out.push(mod);
         else notes.push({ ...mod, conditional: true });
@@ -794,6 +809,17 @@ export class Engine {
     ch.stateOptions = [];
     for (const c of state.conditions || []) ch.stateOptions.push('self:condition:' + c.slug);
     if (state.raging) ch.stateOptions.push('self:effect:rage');
+    // Strike switches the player flips (Expanded Splash, Sticky Bomb, Bomber field vials: cold/electricity/fire).
+    ch.toggles = [];
+    for (const { r, inst } of ch.rules) {
+      if (r.key !== 'RollOption' || !r.strikeToggle || !r.option || ch.toggles.some((t) => t.option === r.option)) continue;
+      const label = r.label && !/^PF2E\./.test(r.label) ? r.label : inst.rec.name;
+      const subs = Array.isArray(r.suboptions) ? r.suboptions.filter((x) => x && x.value).map((x) => ({ value: x.value, label: x.label && !/^PF2E\./.test(x.label) ? x.label : titleCase(x.value) })) : [];
+      const v = (state.toggles || {})[r.option];
+      const on = subs.length ? (subs.some((x) => x.value === v) ? v : null) : (v == null ? !!r.value : !!v);
+      ch.toggles.push({ option: r.option, label, source: inst.rec.name, subs, on });
+      if (on) { ch.stateOptions.push(r.option); if (typeof on === 'string') ch.stateOptions.push(`${r.option}:${on}`); }
+    }
     ch.effectRules = [];
     for (const e of state.effects || []) {
       const rec = db.get(e.ref);
@@ -1006,7 +1032,10 @@ export class Engine {
     const vialRec = vials && this.db.get('@equipment/versatile-vial');
     if (vialRec) {
       const il = vials.itemLevel || 1, n = il >= 18 ? 4 : il >= 12 ? 3 : il >= 4 ? 2 : 1;
-      weapons.push({ rec: { ...vialRec, damage: { ...vialRec.damage, dice: n }, splash: n, rules: [] }, source: vials.source,
+      const fv = (ch.toggles || []).find((t) => t.option === 'bomber-field-vials' && typeof t.on === 'string');
+      const vType = fv ? fv.on : vialRec.damage.type;
+      const vTraits = fv ? [...(vialRec.traits || []).filter((t) => t !== vialRec.damage.type), fv.on] : vialRec.traits;
+      weapons.push({ rec: { ...vialRec, level: il, damage: { ...vialRec.damage, dice: n, type: vType }, traits: vTraits, splash: n, rules: [] }, source: vials.source,
         item: { potency: n - 1, potencyLabel: 'Vial item bonus', left: Math.max(0, vials.max - (Number(al.vialsUsed) || 0)) } });
     }
     const infusedLeft = new Map();
@@ -1069,6 +1098,7 @@ export class Engine {
       const wOpts = itemOptions({ ...rec, cat: rec.cat }, 'equipment');
       wOpts.add(ranged ? 'item:ranged' : 'item:melee');
       if (thrown) wOpts.add('item:thrown');
+      this._weaponCtx = { level: rec.level || 0, dice: rec.damage?.dice || 1, potency, splash: rec.splash || 0 };
       const am = this._mods(ch, ['attack', 'attack-roll', 'strike-attack-roll', rec.slug + '-attack', attr + '-based'], state, wOpts);
       const mods = [...am.mods, ...this._conditionMods(state.conditions || [])('attack', attr)];
       const notes = am.notes;
@@ -1084,16 +1114,53 @@ export class Engine {
       else if (traits.includes('propulsive') && A.str > 0) { dmgMod += Math.floor(A.str / 2); dmgParts.push('½ Str'); }
       if (spec[rank] && !traits.includes('bomb')) { dmgMod += spec[rank]; dmgParts.push('Weapon spec.'); }
       if (rageBonus && !ranged) { const rb = agile ? Math.floor(rageBonus / 2) : rageBonus; dmgMod += rb; dmgParts.push('Rage'); }
-      const dm = this._mods(ch, ['strike-damage', 'damage', rec.slug + '-damage'], state, wOpts, ['rage']);
-      const ds = stackMods(dm.mods);
-      dmgMod += ds.total;
-      const die = rec.damage?.die || 'd4';
+      const isAlchBomb = traits.includes('bomb') && traits.includes('alchemical');
+      const dSel = ['strike-damage', 'damage', rec.slug + '-damage'];
+      if (rec.base) dSel.push(rec.base + '-base-type-damage');
+      if (isAlchBomb) dSel.push('alchemical-bomb-damage');
+      const dm = this._mods(ch, dSel, state, wOpts, ['rage']);
+      this._weaponCtx = null;
       const dmgType = rec.damage?.type || '';
+      // Persistent and splash bonuses (Burn It!: +1 persistent fire) don't add to the hit itself.
+      const ds = stackMods(dm.mods.filter((m) => !m.category || m.category === 'precision'));
+      const extras = {};
+      for (const m of ds.used) {
+        if (m.damageType && dmgType && m.damageType !== dmgType) extras[m.damageType] = (extras[m.damageType] || 0) + m.value;
+        else dmgMod += m.value;
+      }
+      const splashBonus = stackMods(dm.mods.filter((m) => m.category === 'splash')).total;
+      let splashBase = rec.splash || 0;
+      if (splashBase && isAlchBomb) {
+        const sOpts = new Set([...ch.options, ...(ch.stateOptions || []), ...wOpts]);
+        for (const { r: a, inst: ai } of ch.rules) {
+          if (a.key !== 'AdjustModifier' || a.slug !== 'splash' || ![].concat(a.selector || [], a.selectors || []).some((x) => dSel.includes(x))) continue;
+          if (a.predicate && a.predicate.length && !test(this._subst(a.predicate, ch, ai), sOpts)) continue;
+          const v = this._value(ch, ai, a.value);
+          if (a.mode === 'upgrade') splashBase = Math.max(splashBase, v); else if (a.mode === 'override') splashBase = v;
+        }
+      }
+      const per = rec.damage?.persist;
+      let persistent = '';
+      const pType = (per && per.n && per.type) || dmgType;
+      // Typed bonuses (Burn It!: +1 persistent fire) only add to persistent damage the bomb already deals;
+      // untyped ones (Sticky Bomb: persistent equal to the splash) take the bomb's damage type.
+      const pMods = dm.mods.filter((m) => m.category === 'persistent' && (m.damageType ? m.damageType === pType : true));
+      const pb = stackMods(pMods).total;
+      if (per && per.n) {
+        const base = per.faces ? `${per.n}d${per.faces}${pb ? (pb > 0 ? '+' : '') + pb : ''}` : String(per.n + pb);
+        persistent = `${base} persistent ${pType}`.trim();
+      } else {
+        const own = stackMods(pMods.filter((m) => !m.damageType)).total;
+        if (own > 0) persistent = `${pb} persistent ${pType}`.trim();
+      }
+      // Flat damage (die "") such as Acid Flask's 1 acid.
+      const die = rec.damage ? (rec.damage.die || '') : 'd4';
       return {
         name: rec.name, rec, item, source, attack, rank, attr, traits, ranged,
         map: agile ? [attack - 4, attack - 8] : [attack - 5, attack - 10],
-        damage: `${dice}${die}${dmgMod ? (dmgMod > 0 ? '+' : '') + dmgMod : ''} ${dmgType}`.trim(),
-        splash: rec.splash || 0, range: rec.range || null, mods: s.used, notes, dmgNotes: dm.notes, dmgParts,
+        damage: `${die ? `${dice}${die}${dmgMod ? (dmgMod > 0 ? '+' : '') + dmgMod : ''}` : Math.max(1, dice + dmgMod)} ${dmgType}`.trim()
+          + Object.entries(extras).map(([t, v]) => ` + ${v} ${t}`).join(''),
+        persistent, splash: splashBase ? splashBase + splashBonus : 0, range: rec.range || null, mods: s.used, notes, dmgNotes: dm.notes.filter((n) => !n.category), dmgParts,
       };
     });
   }

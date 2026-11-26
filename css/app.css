@@ -1385,3 +1385,9 @@ html[data-theme="light"] .gm-enc-top .gm-enc-name:hover, html[data-theme="light"
 .pslot.empty { justify-content: center; border-style: dashed; color: var(--muted); font: inherit; cursor: pointer; }
 .pslot.empty:hover { border-color: var(--accent-line); color: var(--accent); }
 .linkish { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
+/* Strike switches (Expanded Splash, Sticky Bomb, field vials) above the Strikes list. */
+.strike-toggles { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
+.st-tog { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; background: rgba(var(--ov), .03); cursor: pointer; font-size: 13.5px; }
+.st-tog input { width: 18px; height: 18px; accent-color: var(--accent); }
+.st-tog select { min-height: 32px; padding: 2px 8px; font: inherit; }
+.st-tog.on { border-color: var(--accent-line); background: var(--accent-soft); }

@@ -1,7 +1,7 @@
 // Character sheet (Obsidian layout): header card with HP and points, defence tiles, three columns —
 // attributes/conditions on the left, tabbed actions/spells/feats/inventory in the middle, skills on the right.
 import { DB, refOf } from './data.js';
-import { Engine, normalizeBuild } from './engine.js';
+import { Engine, normalizeBuild, asObj } from './engine.js';
 import { Store, api } from './store.js';
 import { SKILL_ACTIONS, CORE_BASIC, NEEDS_SPEED, BASIC_ROLLS, modeOf, costOf, originOf, ORIGIN_ORDER } from './actions.js';
 import { mountAccount, syncLabel, saveWithConflictCheck, askConflict } from './account.js';
@@ -53,9 +53,13 @@ if (!readOnly && charRec.id && store.conflictFor(charRec.id)) {
 }
 const build = normalizeBuild(charRec.build);
 const state = Object.assign({ hp: null, temp: 0, hero: 1, focus: null, dying: 0, wounded: 0, conditions: [], effects: [], raging: false, shieldRaised: false,
-  used: {}, prep: {}, innateUsed: {}, dailyUsed: {}, notes: '', companions: {}, freqUsed: {}, situational: {}, favEffects: [], alchemy: {} }, charRec.state || {});
-for (const k of ['used', 'prep', 'innateUsed', 'dailyUsed', 'companions', 'freqUsed', 'situational', 'alchemy']) state[k] = state[k] || {};
-state.alchemy.prep = state.alchemy.prep || {};
+  used: {}, prep: {}, innateUsed: {}, dailyUsed: {}, notes: '', companions: {}, freqUsed: {}, situational: {}, favEffects: [], alchemy: {}, toggles: {} }, charRec.state || {});
+// Maps saved by older versions of the server can come back as lists ({} became []): turn them back into maps.
+for (const k of ['used', 'prep', 'innateUsed', 'dailyUsed', 'companions', 'freqUsed', 'situational', 'alchemy', 'toggles']) state[k] = asObj(state[k]);
+for (const k of Object.keys(state.prep)) state.prep[k] = asObj(state.prep[k]);
+for (const k of Object.keys(state.used)) state.used[k] = asObj(state.used[k]);
+for (const k of Object.keys(state.companions)) state.companions[k] = asObj(state.companions[k]);
+state.alchemy.prep = asObj(state.alchemy.prep);
 if (!Array.isArray(state.favEffects)) state.favEffects = [];
 if (state.effects.length || state.favEffects.length) await db.load(['spell-effects', 'feat-effects', 'equipment-effects']);
 let ch = null;
@@ -374,11 +378,13 @@ function actionGroups() {
 }
 
 TAB_RENDER.actions = (el) => {
-  el.innerHTML = `<h3 class="sub-head">Strikes</h3>${ch.strikes.map((s) => `
+  el.innerHTML = `<h3 class="sub-head">Strikes</h3>${(ch.toggles || []).length ? `<div class="strike-toggles" role="group" aria-label="Strike options">${ch.toggles.map((t) => (t.subs.length
+    ? `<label class="st-tog ${t.on ? 'on' : ''}" title="${esc(t.source)}"><span>${t.option === 'bomber-field-vials' ? 'Vial damage' : esc(t.label)}</span><select data-tog="${esc(t.option)}" ${readOnly ? 'disabled' : ''}><option value="">${t.option === 'bomber-field-vials' ? 'Acid (normal)' : 'Off'}</option>${t.subs.map((x) => `<option value="${esc(x.value)}" ${t.on === x.value ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></label>`
+    : `<label class="st-tog ${t.on ? 'on' : ''}" title="${esc(t.source)}"><input type="checkbox" data-tog="${esc(t.option)}" ${t.on ? 'checked' : ''} ${readOnly ? 'disabled' : ''}><span>${esc(t.label)}</span></label>`)).join('')}</div>` : ''}${ch.strikes.map((s) => `
     <div class="strike"><div class="s-name" ${s.rec._pack ? `data-show="${esc(refOf(s.rec))}" role="button"` : ''}><b>${esc(s.name)}${s.item && s.item.qty > 1 ? ` <span class="muted small">×${s.item.qty}</span>` : ''}</b>${s.item && s.item.left != null ? ` <span class="badge ${s.item.left ? '' : 'warn'}">${s.item.left} left${s.item.infused ? ' · infused' : ''}</span>` : ''}
       <div class="s-traits">${esc([s.ranged ? 'Ranged' + (s.range ? ' ' + s.range + ' ft' : '') : 'Melee', ...s.traits.filter((t) => t !== 'consumable').map(titleCase)].join(' · '))}</div></div>
       <div class="atk" aria-label="Attack bonuses"><span>${signed(s.attack)}</span><span>${signed(s.map[0])}</span><span>${signed(s.map[1])}</span></div>
-      <div class="dmg">${esc(s.damage)}${s.splash ? `<div class="tiny muted">${s.splash} splash</div>` : ''}</div>
+      <div class="dmg">${esc(s.damage)}${s.persistent ? `<div class="tiny muted">${esc(s.persistent)}</div>` : ''}${s.splash ? `<div class="tiny muted">${s.splash} splash</div>` : ''}</div>
       ${s.notes.length || s.dmgNotes.length ? `<div class="s-notes">${[...s.notes, ...s.dmgNotes].map((n) => `${signed(n.value)} ${esc(n.label)} (situational)`).join(' · ')}</div>` : ''}</div>`).join('')}
     <div class="act-tools">
       <div class="act-seg" role="tablist" aria-label="Kinds of actions">${ACT_TABS.map((t) => `<button type="button" role="tab" data-acttab="${t.id}" aria-selected="${actF.tab === t.id}">${t.label} <span class="n"></span></button>`).join('')}</div>
@@ -419,6 +425,7 @@ TAB_RENDER.actions = (el) => {
   const draw = () => {
     const counts = {};
     for (const t of ACT_TABS) counts[t.id] = groups[t.id].filter(pass).length;
+    $$('[data-tog]', el).forEach((i) => (i.onchange = () => { state.toggles[i.dataset.tog] = i.type === 'checkbox' ? i.checked : (i.value || null); change(); }));
     $$('[data-acttab]', el).forEach((b) => { b.querySelector('.n').textContent = counts[b.dataset.acttab]; b.setAttribute('aria-selected', String(actF.tab === b.dataset.acttab)); });
     $('[data-usable]', el).hidden = actF.tab !== 'skill';
     const items = groups[actF.tab].filter(pass);

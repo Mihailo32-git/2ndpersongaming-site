@@ -133,6 +133,7 @@ function ensureSchema(PDO $pdo): void {
 function now(int $offset = 0): string { return gmdate('Y-m-d H:i:s', time() + $offset); }
 function body(): array {
     $raw = file_get_contents('php://input', false, null, 0, 4_000_000);
+    $GLOBALS['RAW_BODY'] = is_string($raw) ? $raw : '';
     if ($raw === '' || $raw === false) return [];
     $d = json_decode($raw, true);
     if (!is_array($d)) fail(400, 'Invalid JSON');
@@ -182,8 +183,20 @@ function ownChar(int $id, int $uid): array {
     return $c;
 }
 function iso(string $dt): string { return str_replace(' ', 'T', $dt) . 'Z'; }
+/** A field of the request body as JSON, exactly as sent: an empty {} stays {} (decoding to PHP arrays turns it into []). */
+function exactJson(string $key, $default = null): string {
+    $o = json_decode($GLOBALS['RAW_BODY'] ?? '', false);
+    $v = is_object($o) && property_exists($o, $key) ? $o->$key : $default;
+    return json_encode($v ?? $default, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+/** Stored JSON back out, keeping {} as {}. */
+function jsonOut(?string $s, bool $objectIfEmpty = false) {
+    $v = json_decode((string)$s, false);
+    if ($objectIfEmpty && (!$v || $v === [])) return new stdClass();
+    return $v;
+}
 function charOut(array $c): array {
-    return ['id' => (string)$c['id'], 'name' => $c['name'], 'build' => json_decode($c['build'], true), 'state' => json_decode($c['state'], true) ?: new stdClass(),
+    return ['id' => (string)$c['id'], 'name' => $c['name'], 'build' => jsonOut($c['build']), 'state' => jsonOut($c['state'], true),
         'share_token' => $c['share_token'], 'version' => (int)$c['version'], 'updated' => iso($c['updated_at'])];
 }
 // ------------------------------------------------------------------ parties
@@ -212,7 +225,7 @@ function ownEncounter(string $id, int $uid): ?array {
     return $st->fetch() ?: null;
 }
 function encOut(array $e): array {
-    return ['id' => $e['id'], 'name' => $e['name'], 'summary' => $e['summary'], 'version' => (int)$e['version'], 'updated' => iso($e['updated_at']), 'data' => json_decode($e['data'], true)];
+    return ['id' => $e['id'], 'name' => $e['name'], 'summary' => $e['summary'], 'version' => (int)$e['version'], 'updated' => iso($e['updated_at']), 'data' => jsonOut($e['data'])];
 }
 function partyOut(array $p): array {
     $st = db()->prepare('SELECT COUNT(*) FROM party_members WHERE party_id = ?');
@@ -434,8 +447,8 @@ switch ("$method $route") {
         $b = body();
         if (!isset($b['build']) || !is_array($b['build'])) fail(400, 'Missing build');
         $sum = charSummary($b['build']);
-        $build = json_encode($b['build'], JSON_UNESCAPED_UNICODE);
-        $state = json_encode($b['state'] ?? new stdClass(), JSON_UNESCAPED_UNICODE);
+        $build = exactJson('build');
+        $state = exactJson('state', new stdClass());
         $id = (int)($b['id'] ?? 0);
         if ($id) {
             $c = ownChar($id, $u['id']);
@@ -469,7 +482,7 @@ switch ("$method $route") {
         $id = (int)($b['id'] ?? 0);
         ownChar($id, $u['id']);
         db()->prepare('UPDATE characters SET state=?, updated_at=? WHERE id=? AND user_id=?')
-            ->execute([json_encode($b['state'] ?? new stdClass(), JSON_UNESCAPED_UNICODE), now(), $id, $u['id']]);
+            ->execute([exactJson('state', new stdClass()), now(), $id, $u['id']]);
         ok(['ok' => true]);
 
     case 'POST delete':
@@ -613,7 +626,7 @@ switch ("$method $route") {
         $b = body();
         $id = (string)($b['id'] ?? '');
         if (!preg_match('/^[A-Za-z0-9_-]{6,40}$/', $id)) fail(400, 'Bad encounter id');
-        $data = json_encode($b['data'] ?? null, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $data = exactJson('data');
         if (!is_array($b['data'] ?? null) || strlen($data) > 400000) fail(400, 'Encounter is missing or too big');
         $name = mb_substr(trim((string)($b['name'] ?? '')), 0, 120) ?: 'Encounter';
         $summary = mb_substr(trim((string)($b['summary'] ?? '')), 0, 255);
@@ -639,7 +652,7 @@ switch ("$method $route") {
         $u = needUser();
         $st = db()->prepare('SELECT id, kind, name, data, version, updated_at FROM homebrew WHERE user_id = ? ORDER BY name');
         $st->execute([$u['id']]);
-        ok(['items' => array_map(fn($h) => ['id' => $h['id'], 'kind' => $h['kind'], 'name' => $h['name'], 'version' => (int)$h['version'], 'updated' => iso($h['updated_at']), 'data' => json_decode($h['data'], true)], $st->fetchAll())]);
+        ok(['items' => array_map(fn($h) => ['id' => $h['id'], 'kind' => $h['kind'], 'name' => $h['name'], 'version' => (int)$h['version'], 'updated' => iso($h['updated_at']), 'data' => jsonOut($h['data'])], $st->fetchAll())]);
 
     case 'POST homebrew_save':
         $u = needUser();
@@ -647,7 +660,7 @@ switch ("$method $route") {
         $id = (string)($b['id'] ?? '');
         if (!preg_match('/^[A-Za-z0-9_-]{6,40}$/', $id)) fail(400, 'Bad id');
         $kind = in_array($b['kind'] ?? '', ['creature'], true) ? $b['kind'] : 'creature';
-        $data = json_encode($b['data'] ?? null, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $data = exactJson('data');
         if (!is_array($b['data'] ?? null) || strlen($data) > 200000) fail(400, 'Missing or too big');
         $name = mb_substr(trim((string)($b['name'] ?? '')), 0, 120) ?: 'Unnamed';
         $st = db()->prepare('SELECT version FROM homebrew WHERE user_id = ? AND id = ?');
