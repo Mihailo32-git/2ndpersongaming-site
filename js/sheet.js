@@ -2,7 +2,7 @@
 // attributes/conditions on the left, tabbed actions/spells/feats/inventory in the middle, skills on the right.
 import { DB, refOf } from './data.js';
 import { Engine, normalizeBuild } from './engine.js';
-import { Store } from './store.js';
+import { Store, api } from './store.js';
 import { SKILL_ACTIONS, CORE_BASIC, NEEDS_SPEED, BASIC_ROLLS, modeOf, costOf, originOf, ORIGIN_ORDER } from './actions.js';
 import { mountAccount, syncLabel, saveWithConflictCheck, askConflict } from './account.js';
 import { modal, toast, confirmBox, showRef, wireRefs, traitChips, actionGlyph, rankBadge, esc } from './ui.js';
@@ -26,16 +26,23 @@ const store = await new Store().init();
 
 const params = new URLSearchParams(location.search);
 const shareToken = params.get('share');
+const gmView = params.get('party') && params.get('member') ? { party: params.get('party'), member: params.get('member') } : null;
 let charRec;
 try {
   if (shareToken) charRec = await store.getShared(shareToken);
+  else if (gmView) {
+    // The GM opening a player's sheet from the GM screen: read-only, from the party.
+    const r = await api('party', null, { id: gmView.party });
+    charRec = r.members.find((m) => m.id === gmView.member);
+    if (!charRec) throw new Error('This character isn’t in your party any more.');
+  }
   else if (params.get('id')) charRec = await store.get(params.get('id'));
   else throw new Error('No character selected.');
 } catch (e) {
   main.innerHTML = `<div class="card"><p class="bad">${esc(e.message)}</p><a class="btn" href="index.html">Back to characters</a></div>`;
   throw e;
 }
-const readOnly = !!shareToken;
+const readOnly = !!shareToken || !!gmView;
 if (!readOnly && charRec.id && store.conflictFor(charRec.id)) {
   const pick = await askConflict(store.conflictFor(charRec.id));
   if (pick === 'theirs') { store.discardLocal(charRec.id); location.reload(); return; }
@@ -55,8 +62,8 @@ if (!readOnly) {
   $('#editLink').hidden = false; $('#editLink').href = edit;
   $('#navBuilder').hidden = false; $('#navBuilder').href = edit;
   if (build.level < 20) { $('#levelUpLink').hidden = false; $('#levelUpLink').href = 'levelup.html?id=' + encodeURIComponent(charRec.id); }
-  if (store.mode === 'api') { $('#shareBtn').hidden = false; $('#shareBtn').onclick = share; }
-} else $('#saveState').textContent = 'Read-only (shared sheet)';
+  if (store.mode === 'api') { $('#shareBtn').hidden = false; $('#shareBtn').onclick = share; $('#partyBtn').hidden = false; $('#partyBtn').onclick = openParty; }
+} else $('#saveState').textContent = gmView ? 'Read-only (GM view)' : 'Read-only (shared sheet)';
 
 let saveTimer = null;
 const isLocal = () => store.mode !== 'api' || String(charRec.id || '').startsWith('local-');
@@ -88,6 +95,34 @@ if (!readOnly) {
   mountAccount(store);
   window.addEventListener('beforeunload', () => { if (saveTimer) { clearTimeout(saveTimer); store.saveState(charRec.id, state); } });
 }
+// Join a GM's party with the code they give you; the GM then sees this sheet live (read-only).
+async function openParty() {
+  const id = String(charRec.id || '');
+  const m = modal('Party', {});
+  if (id.startsWith('tmp-') || id.startsWith('local-')) { m.body.innerHTML = '<p>This character isn’t saved to your account yet. Go online and wait for it to sync, then try again.</p>'; return; }
+  const draw = async () => {
+    let list = [];
+    try { list = (await api('character_parties', null, { id })).parties || []; } catch (e) { m.body.innerHTML = `<p class="bad">${esc(e.message)}</p>`; return; }
+    m.body.innerHTML = `
+      ${list.length ? `<h3 class="inv-h" style="margin-top:0">${esc(build.name || 'This character')} is in</h3>${list.map((p) => `<div class="gm-mem"><span><b>${esc(p.name)}</b> <span class="muted small">GM: ${esc(p.gm || '—')}</span></span><button type="button" class="btn small ghost" data-leave="${esc(p.id)}">Leave</button></div>`).join('')}` : `<p class="muted" style="margin-top:0">Not in a party yet.</p>`}
+      <h3 class="inv-h">Join a party</h3>
+      <p class="muted small">Ask your GM for the party’s join code. They’ll see this sheet (HP, conditions, spell slots…) but can’t change it.</p>
+      <div class="row" style="gap:8px"><input type="text" id="joinCode" class="mono" placeholder="ABC-123" maxlength="8" autocapitalize="characters" autocomplete="off" style="flex:1;text-transform:uppercase;letter-spacing:2px"><button type="button" class="btn primary" id="joinGo">Join</button></div>`;
+    const inp = $('#joinCode', m.body);
+    const go = async () => {
+      try { const r = await api('party_join', { code: inp.value, character_id: id }); toast(`Joined ${r.party.name}`, 'ok'); draw(); }
+      catch (e) { toast(e.message, 'error'); }
+    };
+    $('#joinGo', m.body).onclick = go;
+    inp.onkeydown = (e) => { if (e.key === 'Enter') go(); };
+    $$('[data-leave]', m.body).forEach((b) => (b.onclick = async () => {
+      if (!(await confirmBox('Leave this party? The GM won’t see this sheet any more.'))) return;
+      try { await api('party_leave', { party_id: b.dataset.leave, character_id: id }); draw(); } catch (e) { toast(e.message, 'error'); }
+    }));
+  };
+  draw();
+}
+
 async function share() {
   try {
     const r = await store.share(charRec.id, true);

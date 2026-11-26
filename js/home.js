@@ -1,5 +1,5 @@
 // Home page: character list, login, import.
-import { Store } from './store.js';
+import { Store, api } from './store.js';
 import { mountAccount, openAuth, syncLabel } from './account.js';
 import { modal, toast, confirmBox, esc } from './ui.js';
 import { titleCase } from './util.js';
@@ -147,4 +147,28 @@ store.onChange(() => header());
 
 
 render();
+
+// A join link from a GM (index.html?join=CODE): pick which character joins the party.
+const joinCode = new URLSearchParams(location.search).get('join');
+if (joinCode) joinParty(joinCode);
+async function joinParty(code) {
+  const clear = () => history.replaceState(null, '', location.pathname);
+  if (!store.user) {
+    const m = modal('Join a party', {});
+    m.body.innerHTML = `<p>Log in to join this party. Your GM will see your character’s sheet live, but can’t change it.</p><div class="row end"><button type="button" class="btn primary" id="jLogin">Log in</button></div>`;
+    $('#jLogin').onclick = () => { m.close(); openAuth(store, { onDone: () => location.reload() }); };
+    return;
+  }
+  let info;
+  try { info = (await api('party_peek', null, { code })).party; } catch (e) { toast(e.message, 'error'); clear(); return; }
+  const list = (await store.list().catch(() => [])).filter((c) => !String(c.id).startsWith('tmp-') && !String(c.id).startsWith('local-'));
+  const m = modal(`Join “${info.name}”`, {});
+  m.body.innerHTML = info.locked ? '<p>This party is locked. Ask your GM to unlock it.</p>'
+    : `<p class="muted" style="margin-top:0">GM: ${esc(info.gm || '—')}. Choose the character that joins:</p>
+      ${list.map((c) => `<div class="gm-mem"><span><b>${esc(c.name || 'Unnamed')}</b> <span class="muted small">level ${c.level || ''}</span></span><button type="button" class="btn small primary" data-j="${esc(c.id)}">Join</button></div>`).join('') || '<p>You have no characters saved to your account yet.</p>'}`;
+  $$('[data-j]').forEach((b) => (b.onclick = async () => {
+    try { await api('party_join', { code, character_id: b.dataset.j }); toast(`Joined ${info.name}`, 'ok'); m.close(); clear(); }
+    catch (e) { toast(e.message, 'error'); }
+  }));
+}
 })().catch((e) => { console.error(e); const m = document.getElementById('main') || document.getElementById('list'); if (m && !m.querySelector('.bad')) m.insertAdjacentHTML('afterbegin', '<p class="bad">Something went wrong: ' + String(e.message || e).replace(/</g, '&lt;') + '</p>'); });

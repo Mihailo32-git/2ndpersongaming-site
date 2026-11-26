@@ -88,9 +88,9 @@ function db(): PDO {
     return $pdo;
 }
 
-/** Creates or upgrades the tables. Schema 2: character versions, password resets, attempt kinds. */
+/** Creates or upgrades the tables. Schema 2: character versions, password resets, attempt kinds. Schema 3: parties. */
 function ensureSchema(PDO $pdo): void {
-    $want = '2';
+    $want = '3';
     try {
         $v = $pdo->query("SELECT v FROM app_meta WHERE k = 'schema'")->fetchColumn();
         if ($v === $want) return;
@@ -103,12 +103,18 @@ function ensureSchema(PDO $pdo): void {
         "CREATE INDEX IF NOT EXISTS idx_user ON characters(user_id)",
         "CREATE TABLE IF NOT EXISTS login_attempts (ip TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'login', attempted_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS password_resets (token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS parties (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, name TEXT NOT NULL DEFAULT '', code TEXT NOT NULL UNIQUE, locked INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+        "CREATE INDEX IF NOT EXISTS idx_party_owner ON parties(owner_id)",
+        "CREATE TABLE IF NOT EXISTS party_members (party_id INTEGER NOT NULL REFERENCES parties(id) ON DELETE CASCADE, character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE, joined_at TEXT NOT NULL, PRIMARY KEY (party_id, character_id))",
+        "CREATE INDEX IF NOT EXISTS idx_member_char ON party_members(character_id)",
     ] : [
         "CREATE TABLE IF NOT EXISTS app_meta (k VARCHAR(40) NOT NULL PRIMARY KEY, v VARCHAR(255) NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
         "CREATE TABLE IF NOT EXISTS users (id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, email VARCHAR(190) NOT NULL UNIQUE, name VARCHAR(100) NOT NULL DEFAULT '', password_hash VARCHAR(255) NOT NULL, created_at DATETIME NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
         "CREATE TABLE IF NOT EXISTS characters (id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, user_id INT UNSIGNED NOT NULL, name VARCHAR(120) NOT NULL DEFAULT '', level TINYINT UNSIGNED NOT NULL DEFAULT 1, class VARCHAR(60) NOT NULL DEFAULT '', ancestry VARCHAR(80) NOT NULL DEFAULT '', heritage VARCHAR(80) NOT NULL DEFAULT '', build MEDIUMTEXT NOT NULL, state MEDIUMTEXT NOT NULL, share_token VARCHAR(40) NULL UNIQUE, version INT UNSIGNED NOT NULL DEFAULT 1, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, INDEX idx_user (user_id), CONSTRAINT fk_char_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
         "CREATE TABLE IF NOT EXISTS login_attempts (ip VARCHAR(45) NOT NULL, kind VARCHAR(10) NOT NULL DEFAULT 'login', attempted_at DATETIME NOT NULL, INDEX idx_ip_time (ip, attempted_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
         "CREATE TABLE IF NOT EXISTS password_resets (token_hash CHAR(64) NOT NULL PRIMARY KEY, user_id INT UNSIGNED NOT NULL, expires_at DATETIME NOT NULL, INDEX idx_reset_user (user_id), CONSTRAINT fk_reset_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+        "CREATE TABLE IF NOT EXISTS parties (id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, owner_id INT UNSIGNED NOT NULL, name VARCHAR(100) NOT NULL DEFAULT '', code CHAR(6) NOT NULL UNIQUE, locked TINYINT(1) NOT NULL DEFAULT 0, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, INDEX idx_party_owner (owner_id), CONSTRAINT fk_party_owner FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        "CREATE TABLE IF NOT EXISTS party_members (party_id INT UNSIGNED NOT NULL, character_id INT UNSIGNED NOT NULL, joined_at DATETIME NOT NULL, PRIMARY KEY (party_id, character_id), INDEX idx_member_char (character_id), CONSTRAINT fk_pm_party FOREIGN KEY (party_id) REFERENCES parties(id) ON DELETE CASCADE, CONSTRAINT fk_pm_char FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
     ];
     foreach ($ddl as $q) $pdo->exec($q);
     // Upgrades for databases made from the first schema.sql
@@ -176,6 +182,32 @@ function charOut(array $c): array {
     return ['id' => (string)$c['id'], 'name' => $c['name'], 'build' => json_decode($c['build'], true), 'state' => json_decode($c['state'], true) ?: new stdClass(),
         'share_token' => $c['share_token'], 'version' => (int)$c['version'], 'updated' => iso($c['updated_at'])];
 }
+// ------------------------------------------------------------------ parties
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O or 1/I to mix up
+function newCode(): string {
+    for ($t = 0; $t < 20; $t++) {
+        $c = '';
+        for ($i = 0; $i < 6; $i++) $c .= CODE_CHARS[random_int(0, strlen(CODE_CHARS) - 1)];
+        $st = db()->prepare('SELECT 1 FROM parties WHERE code = ?');
+        $st->execute([$c]);
+        if (!$st->fetchColumn()) return $c;
+    }
+    fail(500, 'Could not make a party code');
+}
+function cleanCode(string $c): string { return preg_replace('/[^A-Z0-9]/', '', strtoupper($c)); }
+function ownParty(int $id, int $uid): array {
+    $st = db()->prepare('SELECT * FROM parties WHERE id = ? AND owner_id = ?');
+    $st->execute([$id, $uid]);
+    $p = $st->fetch();
+    if (!$p) fail(404, 'Party not found');
+    return $p;
+}
+function partyOut(array $p): array {
+    $st = db()->prepare('SELECT COUNT(*) FROM party_members WHERE party_id = ?');
+    $st->execute([$p['id']]);
+    return ['id' => (string)$p['id'], 'name' => $p['name'], 'code' => $p['code'], 'locked' => (bool)$p['locked'], 'members' => (int)$st->fetchColumn()];
+}
+
 function siteUrl(): string {
     global $config, $https;
     if (!empty($config['site_url'])) return rtrim((string)$config['site_url'], '/');
@@ -363,6 +395,9 @@ switch ("$method $route") {
         $st = db()->prepare('SELECT password_hash FROM users WHERE id = ?');
         $st->execute([$u['id']]);
         if (!password_verify((string)(body()['password'] ?? ''), (string)$st->fetchColumn())) { record('login'); fail(401, 'Wrong password'); }
+        db()->prepare('DELETE FROM party_members WHERE character_id IN (SELECT id FROM characters WHERE user_id = ?)')->execute([$u['id']]);
+        db()->prepare('DELETE FROM party_members WHERE party_id IN (SELECT id FROM parties WHERE owner_id = ?)')->execute([$u['id']]);
+        db()->prepare('DELETE FROM parties WHERE owner_id = ?')->execute([$u['id']]);
         db()->prepare('DELETE FROM characters WHERE user_id = ?')->execute([$u['id']]);
         db()->prepare('DELETE FROM password_resets WHERE user_id = ?')->execute([$u['id']]);
         db()->prepare('DELETE FROM users WHERE id = ?')->execute([$u['id']]);
@@ -426,6 +461,7 @@ switch ("$method $route") {
     case 'POST delete':
         $u = needUser();
         $b = body();
+        db()->prepare('DELETE FROM party_members WHERE character_id IN (SELECT id FROM characters WHERE id=? AND user_id=?)')->execute([(int)($b['id'] ?? 0), $u['id']]);
         db()->prepare('DELETE FROM characters WHERE id=? AND user_id=?')->execute([(int)($b['id'] ?? 0), $u['id']]);
         ok(['ok' => true]);
 
@@ -447,6 +483,102 @@ switch ("$method $route") {
         $out = charOut($c);
         unset($out['share_token']);
         ok(['character' => $out]);
+
+    // ---------------------------------------------------------------- parties (GM side)
+    case 'GET parties':
+        $u = needUser();
+        $st = db()->prepare('SELECT * FROM parties WHERE owner_id = ? ORDER BY updated_at DESC');
+        $st->execute([$u['id']]);
+        ok(['parties' => array_map('partyOut', $st->fetchAll())]);
+
+    case 'POST party_create':
+        $u = needUser();
+        $st = db()->prepare('SELECT COUNT(*) FROM parties WHERE owner_id = ?');
+        $st->execute([$u['id']]);
+        if ((int)$st->fetchColumn() >= 20) fail(400, 'You can run up to 20 parties');
+        $name = mb_substr(trim((string)(body()['name'] ?? '')), 0, 100) ?: 'My party';
+        db()->prepare('INSERT INTO parties (owner_id, name, code, locked, created_at, updated_at) VALUES (?,?,?,0,?,?)')->execute([$u['id'], $name, newCode(), now(), now()]);
+        ok(['party' => partyOut(ownParty((int)db()->lastInsertId(), $u['id']))]);
+
+    case 'POST party_update':
+        $u = needUser();
+        $b = body();
+        $p = ownParty((int)($b['id'] ?? 0), $u['id']);
+        $name = isset($b['name']) ? (mb_substr(trim((string)$b['name']), 0, 100) ?: $p['name']) : $p['name'];
+        $locked = isset($b['locked']) ? (int)(bool)$b['locked'] : (int)$p['locked'];
+        $code = !empty($b['newCode']) ? newCode() : $p['code'];
+        db()->prepare('UPDATE parties SET name=?, locked=?, code=?, updated_at=? WHERE id=?')->execute([$name, $locked, $code, now(), $p['id']]);
+        ok(['party' => partyOut(ownParty((int)$p['id'], $u['id']))]);
+
+    case 'POST party_delete':
+        $u = needUser();
+        $p = ownParty((int)(body()['id'] ?? 0), $u['id']);
+        db()->prepare('DELETE FROM party_members WHERE party_id = ?')->execute([$p['id']]);
+        db()->prepare('DELETE FROM parties WHERE id = ?')->execute([$p['id']]);
+        ok(['ok' => true]);
+
+    case 'GET party':
+        // The GM's live view: every member's build and sheet state. With since=…, only sheets changed since then.
+        $u = needUser();
+        $p = ownParty((int)($_GET['id'] ?? 0), $u['id']);
+        $since = (string)($_GET['since'] ?? '');
+        $q = 'SELECT c.*, u.name AS player FROM party_members m JOIN characters c ON c.id = m.character_id JOIN users u ON u.id = c.user_id WHERE m.party_id = ?';
+        $args = [$p['id']];
+        $ids = db()->prepare('SELECT character_id FROM party_members WHERE party_id = ? ORDER BY joined_at');
+        $ids->execute([$p['id']]);
+        if (preg_match('/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/', $since)) { $t = str_replace(['T', 'Z'], [' ', ''], $since); $q .= ' AND (c.updated_at >= ? OR m.joined_at >= ?)'; $args[] = $t; $args[] = $t; }
+        $st = db()->prepare($q . ' ORDER BY m.joined_at');
+        $st->execute($args);
+        $members = array_map(function ($c) { $o = charOut($c); unset($o['share_token']); $o['player'] = $c['player']; return $o; }, $st->fetchAll());
+        ok(['party' => partyOut($p), 'ids' => array_map(fn($x) => (string)$x, $ids->fetchAll(PDO::FETCH_COLUMN)), 'members' => $members, 'now' => iso(now())]);
+
+    case 'POST party_remove':
+        $u = needUser();
+        $b = body();
+        $p = ownParty((int)($b['id'] ?? 0), $u['id']);
+        db()->prepare('DELETE FROM party_members WHERE party_id = ? AND character_id = ?')->execute([$p['id'], (int)($b['character_id'] ?? 0)]);
+        ok(['ok' => true]);
+
+    // ---------------------------------------------------------------- parties (player side)
+    case 'POST party_join':
+        $u = needUser();
+        if (tooMany('join', 30)) fail(429, 'Too many tries. Wait a few minutes.');
+        $b = body();
+        $c = ownChar((int)($b['character_id'] ?? 0), $u['id']);
+        $st = db()->prepare('SELECT * FROM parties WHERE code = ?');
+        $st->execute([cleanCode((string)($b['code'] ?? ''))]);
+        $p = $st->fetch();
+        if (!$p) { record('join'); fail(404, 'No party has that code. Check it with your GM.'); }
+        if ($p['locked']) fail(403, 'This party is locked. Ask your GM to unlock it.');
+        $st = db()->prepare('SELECT 1 FROM party_members WHERE party_id = ? AND character_id = ?');
+        $st->execute([$p['id'], $c['id']]);
+        if (!$st->fetchColumn()) db()->prepare('INSERT INTO party_members (party_id, character_id, joined_at) VALUES (?,?,?)')->execute([$p['id'], $c['id'], now()]);
+        db()->prepare('UPDATE parties SET updated_at=? WHERE id=?')->execute([now(), $p['id']]);
+        ok(['party' => ['id' => (string)$p['id'], 'name' => $p['name']]]);
+
+    case 'POST party_leave':
+        $u = needUser();
+        $b = body();
+        $c = ownChar((int)($b['character_id'] ?? 0), $u['id']);
+        db()->prepare('DELETE FROM party_members WHERE party_id = ? AND character_id = ?')->execute([(int)($b['party_id'] ?? 0), $c['id']]);
+        ok(['ok' => true]);
+
+    case 'GET party_peek':
+        // What a join code leads to, so the player sees the party's name before joining.
+        $u = needUser();
+        if (tooMany('join', 30)) fail(429, 'Too many tries. Wait a few minutes.');
+        $st = db()->prepare('SELECT p.name, p.locked, u.name AS gm FROM parties p JOIN users u ON u.id = p.owner_id WHERE p.code = ?');
+        $st->execute([cleanCode((string)($_GET['code'] ?? ''))]);
+        $p = $st->fetch();
+        if (!$p) { record('join'); fail(404, 'No party has that code. Check it with your GM.'); }
+        ok(['party' => ['name' => $p['name'], 'gm' => $p['gm'], 'locked' => (bool)$p['locked']]]);
+
+    case 'GET character_parties':
+        $u = needUser();
+        $c = ownChar((int)($_GET['id'] ?? 0), $u['id']);
+        $st = db()->prepare('SELECT p.id, p.name, u.name AS gm FROM party_members m JOIN parties p ON p.id = m.party_id JOIN users u ON u.id = p.owner_id WHERE m.character_id = ? ORDER BY m.joined_at');
+        $st->execute([$c['id']]);
+        ok(['parties' => array_map(fn($p) => ['id' => (string)$p['id'], 'name' => $p['name'], 'gm' => $p['gm']], $st->fetchAll())]);
 
     default:
         fail(404, 'Unknown route');

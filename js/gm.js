@@ -1,7 +1,7 @@
 // GM screen: party on the left, the encounter in the middle, the selected creature's statblock on the right.
 import { DB } from './data.js';
 import { Engine, normalizeBuild } from './engine.js';
-import { Store } from './store.js';
+import { Store, api } from './store.js';
 import { mountAccount } from './account.js';
 import { modal, toast, confirmBox, wireRefs, traitChips, esc } from './ui.js';
 import { signed, titleCase, uid } from './util.js';
@@ -54,21 +54,66 @@ async function statblock(slug) {
 }
 
 // ------------------------------------------------------------------ party
+// Logged in: the GM's parties (players join with a code), refreshed every few seconds.
+// Not logged in: the characters saved on this device.
+const PKEY = 'pf2e.gm.party';
 let party = [];
-async function loadParty() {
+let parties = [];
+let activeParty = (() => { try { return localStorage.getItem(PKEY) || null; } catch (e) { return null; } })();
+let partyMeta = null;
+let since = null;
+let live = null; // true = updating, false = connection problem
+const members = new Map();
+const blankState = { hp: null, temp: 0, hero: 1, focus: null, dying: 0, wounded: 0, conditions: [], used: {}, prep: {} };
+const toMember = (rec) => {
+  const build = normalizeBuild(rec.build);
+  const state = Object.assign({}, blankState, rec.state || {});
+  return { rec, build, state, ch: engine.compute(build, state), player: rec.player || '' };
+};
+const setActive = (id) => { activeParty = id; since = null; members.clear(); party = []; partyMeta = null; try { id ? localStorage.setItem(PKEY, id) : localStorage.removeItem(PKEY); } catch (e) { /* ignore */ } };
+async function loadParties() {
+  if (!store.user) { parties = []; return; }
+  try { parties = (await api('parties')).parties || []; } catch (e) { parties = []; }
+  if (!parties.some((p) => p.id === activeParty)) setActive(parties[0]?.id || null);
+}
+async function loadDevice() {
   const list = await store.list().catch(() => []);
   party = [];
   for (const rec of list) {
-    try {
-      const full = rec.build ? rec : await store.get(rec.id);
-      const build = normalizeBuild(full.build);
-      const state = Object.assign({ hp: null, temp: 0, hero: 1, focus: null, dying: 0, wounded: 0, conditions: [], used: {}, prep: {} }, full.state || {});
-      const ch = engine.compute(build, state);
-      party.push({ rec: full, build, state, ch });
-    } catch (e) { console.warn('party', e); }
+    try { party.push(toMember(rec.build ? rec : await store.get(rec.id))); } catch (e) { console.warn('party', e); }
   }
 }
-await loadParty();
+// One poll: only sheets changed since the last one come back.
+async function pollParty() {
+  if (!store.user || !activeParty) return false;
+  try {
+    const r = await api('party', null, since ? { id: activeParty, since } : { id: activeParty }, 8000);
+    partyMeta = r.party; since = r.now;
+    let changed = false;
+    for (const id of [...members.keys()]) if (!r.ids.includes(id)) { members.delete(id); changed = true; }
+    for (const c of r.members) {
+      const old = members.get(c.id);
+      if (!old || old.rec.version !== c.version || JSON.stringify(old.rec.state) !== JSON.stringify(c.state)) { members.set(c.id, toMember(c)); changed = true; }
+    }
+    // Someone we don't have yet (e.g. their sheet changed before they joined): fetch everyone once more.
+    if (r.ids.some((id) => !members.has(id)) && since !== null && !pollParty.again) { since = null; pollParty.again = true; try { return await pollParty(); } finally { pollParty.again = false; } }
+    const next = r.ids.map((id) => members.get(id)).filter(Boolean);
+    if (next.length !== party.length) changed = true;
+    party = next;
+    if (live !== true) { live = true; changed = true; }
+    return changed;
+  } catch (e) {
+    if (live !== false) { live = false; return true; }
+    return false;
+  }
+}
+await loadParties();
+if (store.user && activeParty) await pollParty(); else await loadDevice();
+let pollTimer = setInterval(async () => {
+  if (document.hidden || !store.user || !activeParty) return;
+  const before = party.length;
+  if (await pollParty()) { if (party.length !== before) render(); else renderParty(); }
+}, 3000);
 const partyLevel = () => enc.partyLevel ?? (party.length ? Math.round(party.reduce((a, p) => a + p.build.level, 0) / party.length) : 1);
 const partySize = () => enc.partySize ?? (party.length || 4);
 
@@ -95,14 +140,33 @@ const bar = (cur, max, temp = 0) => {
 };
 const condChips = (list) => (list || []).map((c) => `<span class="gm-cond">${esc(db.get('@conditions/' + c.slug)?.name || titleCase(c.slug))}${c.value ? ' ' + c.value : ''}</span>`).join('');
 
+const fmtCode = (c) => (c ? c.slice(0, 3) + '-' + c.slice(3) : '');
+function partyColumn() {
+  if (!store.user) {
+    return `<h2 class="label" style="margin:0">Party <span class="muted">(this device)</span></h2>
+      <p class="muted small">Log in to run a party: players join with a code and their sheets show up here live.</p>${partyHtml()}`;
+  }
+  if (!parties.length) {
+    return `<h2 class="label" style="margin:0">Party</h2>
+      <p class="muted small">Make a party, then give its join code to your players. Their sheets appear here and update live.</p>
+      <button type="button" class="btn primary" id="newParty" style="width:100%">+ New party</button>`;
+  }
+  return `<div class="gm-party-head">
+      <select id="partySel" aria-label="Party">${parties.map((p) => `<option value="${esc(p.id)}" ${p.id === activeParty ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}<option value="__new">+ New party…</option></select>
+      <button type="button" class="icon-btn" id="partyManage" aria-label="Manage party" title="Manage party">⚙</button>
+    </div>
+    ${partyMeta ? `<button type="button" class="gm-code" id="partyCode" title="Copy the join code">${partyMeta.locked ? '🔒 Locked' : `Join code <b>${esc(fmtCode(partyMeta.code))}</b>`}</button>` : ''}
+    <div class="gm-live ${live === false ? 'off' : ''}">${live === false ? 'Can’t reach the server: retrying…' : '● Live'}</div>
+    ${partyHtml()}`;
+}
 function partyHtml() {
-  if (!party.length) return '<p class="muted small">No characters yet. Players’ sheets show up here.</p>';
+  if (!party.length) return store.user && activeParty ? '<p class="muted small">Nobody has joined yet. Share the join code: players tap <b>Party</b> on their sheet and enter it.</p>' : '<p class="muted small">No characters yet.</p>';
   return party.map((p, i) => {
     const h = hpOf(p); const ch = p.ch;
     const cls = ch.class?.name || ''; const fmax = ch.spellcasting.focus?.max || ch.focusMax || 0;
     return `<button type="button" class="gm-pc" data-pc="${i}">
       <div class="gm-pc-top"><span class="gm-av">${esc((p.build.name || '?').replace(/[^\p{L}\s]/gu, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase())}</span>
-        <span class="gm-pc-id"><b>${esc(p.build.name || 'Unnamed')}</b><span class="muted">${esc(cls)} ${p.build.level}</span></span>
+        <span class="gm-pc-id"><b>${esc(p.build.name || 'Unnamed')}</b><span class="muted">${esc(cls)} ${p.build.level}${p.player ? ' · ' + esc(p.player) : ''}</span></span>
         <span class="gm-ac" title="Armor Class">${ch.ac.total}</span></div>
       <div class="gm-hp-line"><span class="mono"><b>${h.cur}</b>/${h.max}${h.temp ? ` <span class="gm-temp">+${h.temp}</span>` : ''}</span>${p.state.dying ? `<span class="gm-cond bad">Dying ${p.state.dying}</span>` : ''}</div>
       ${bar(h.cur, h.max, h.temp)}
@@ -132,7 +196,7 @@ function openPc(p) {
         <p class="small">Hero points <b>${p.state.hero || 0}</b>${fmax ? ` · Focus <b>${p.state.focus ?? fmax}/${fmax}</b>` : ''}</p>
         ${res.map((e) => `<p class="small"><span class="muted">${esc(e.label)}</span><br>${Object.entries(e.ranks).map(([r, [l, t]]) => `<span class="gm-slot ${l ? '' : 'out'}">${ordinal(r)} <b>${l}</b>/${t}</span>`).join(' ')}</p>`).join('') || '<p class="muted small">No spell slots.</p>'}</div>
     </div>
-    <div class="row end" style="margin-top:12px"><a class="btn" href="sheet.html?id=${encodeURIComponent(p.rec.id)}">Open full sheet</a></div>`;
+    <div class="row end" style="margin-top:12px"><a class="btn" href="${activeParty && store.user ? `sheet.html?party=${encodeURIComponent(activeParty)}&member=${encodeURIComponent(p.rec.id)}` : `sheet.html?id=${encodeURIComponent(p.rec.id)}`}">Open full sheet</a></div>`;
 }
 
 // ------------------------------------------------------------------ encounter
@@ -140,20 +204,24 @@ function xpOf(c) { const lvl = adjLevel(c.level, c.adj); const d = Math.max(-4, 
 function threat() {
   const xp = enc.list.reduce((a, c) => a + xpOf(c), 0);
   const extra = partySize() - 4;
-  const budgets = THREATS.map(([n, b, adj]) => [n, b + adj * extra]);
+  // Fewer than 4 PCs lowers every budget; keep them in order (Low never below Trivial).
+  let floor = 0;
+  const budgets = THREATS.map(([n, b, adj]) => { floor = Math.max(floor, b + adj * extra, 10); return [n, floor]; });
   let label = 'Trivial';
   for (const [n, b] of budgets) if (xp >= b) label = n;
   if (xp < budgets[0][1] * 0.5) label = 'Trivial';
   const max = budgets[4][1];
   return { xp, label, budgets, max };
 }
-function nextLabel(slug, name) {
-  const used = new Set(enc.list.filter((c) => c.slug === slug).map((c) => c.tag));
-  for (const ch of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') if (!used.has(ch)) return ch;
-  return String(used.size + 1);
+// Copies of the same creature are numbered: Ogre Warrior 1, Ogre Warrior 2…
+function nextLabel(slug) {
+  const used = new Set(enc.list.filter((c) => c.slug === slug).map((c) => String(c.tag)));
+  for (let i = 1; ; i++) if (!used.has(String(i))) return String(i);
 }
+// Encounters saved before numbering used letters: A → 1, B → 2…
+for (const c of enc.list) if (/^[A-Z]$/.test(String(c.tag))) c.tag = String(c.tag.charCodeAt(0) - 64);
 function addCreature(rec) {
-  const tag = nextLabel(rec.slug, rec.name);
+  const tag = nextLabel(rec.slug);
   const c = { id: uid(), slug: rec.slug, name: rec.name, level: rec.level, tag, adj: 'normal', max: rec.hp, hp: rec.hp, temp: 0, ac: rec.ac, conditions: [] };
   enc.list.push(c); enc.sel = c.id; save(); render();
 }
@@ -171,7 +239,7 @@ function encounterHtml() {
   const seg = t.budgets.map(([n, b], i) => `<i style="left:${(b / t.max) * 100}%" title="${n} ${b} XP"></i>`).join('');
   return `
     <div class="gm-enc-head">
-      <input class="gm-enc-name" value="${esc(enc.name)}" aria-label="Encounter name">
+      <input type="text" class="gm-enc-name" value="${esc(enc.name)}" aria-label="Encounter name">
       <div class="gm-party-cfg">Party level <button type="button" class="step" data-pl="-1">−</button><b>${partyLevel()}</b><button type="button" class="step" data-pl="1">+</button>
         · <button type="button" class="step" data-ps="-1">−</button><b>${partySize()}</b><button type="button" class="step" data-ps="1">+</button> PCs</div>
     </div>
@@ -301,6 +369,84 @@ function pickCondition(c) {
   }));
 }
 
+// ------------------------------------------------------------------ party management
+function renderParty() {
+  const el = $('.gm-party'); if (!el) return;
+  const scroll = el.scrollTop;
+  el.innerHTML = partyColumn();
+  el.scrollTop = scroll;
+  wireParty();
+}
+async function createParty() {
+  const m = modal('New party', {});
+  m.body.innerHTML = `<label class="field"><span>Party name</span><input type="text" id="pName" maxlength="100" value="My party"></label>
+    <p class="muted small">You’ll get a join code to give your players.</p>
+    <div class="row end"><button type="button" class="btn primary" id="pMake">Create party</button></div>`;
+  const inp = $('#pName', m.body); inp.select();
+  $('#pMake', m.body).onclick = async () => {
+    try {
+      const r = await api('party_create', { name: inp.value });
+      m.close(); await loadParties(); setActive(r.party.id); await loadParties(); await pollParty(); render(); openManage();
+    } catch (e) { toast(e.message, 'error'); }
+  };
+}
+async function copy(text, what) {
+  try { await navigator.clipboard.writeText(text); toast(what + ' copied', 'ok'); }
+  catch (e) { toast(text); }
+}
+async function openManage() {
+  if (!partyMeta) return;
+  const m = modal('Manage party', { wide: true });
+  const link = location.origin + location.pathname.replace(/gm\.html$/, '') + 'index.html?join=' + partyMeta.code;
+  const mine = await store.list().catch(() => []);
+  const draw = () => {
+    const inParty = new Set(party.map((p) => p.rec.id));
+    m.body.innerHTML = `
+      <label class="field"><span>Party name</span><input type="text" id="mName" maxlength="100" value="${esc(partyMeta.name)}"></label>
+      <div class="gm-join">
+        <div><span class="label">Join code</span><div class="gm-join-code">${esc(fmtCode(partyMeta.code))}</div></div>
+        <div class="row" style="gap:6px;flex-wrap:wrap"><button type="button" class="btn small" id="mCopy">Copy code</button><button type="button" class="btn small" id="mLink">Copy join link</button><button type="button" class="btn small ghost" id="mNew">New code</button></div>
+      </div>
+      <label class="gm-lock"><input type="checkbox" id="mLock" ${partyMeta.locked ? 'checked' : ''}> <span><b>Lock party</b><br><span class="muted small">Nobody new can join; current members stay.</span></span></label>
+      <h3 class="inv-h">Members</h3>
+      ${party.map((p) => `<div class="gm-mem"><span><b>${esc(p.build.name)}</b> <span class="muted small">${esc(p.ch.class?.name || '')} ${p.build.level}${p.player ? ' · ' + esc(p.player) : ''}</span></span><button type="button" class="btn small danger" data-rm="${esc(p.rec.id)}">Remove</button></div>`).join('') || '<p class="muted small">Nobody yet.</p>'}
+      ${mine.filter((c) => !inParty.has(c.id) && !String(c.id).startsWith('tmp-') && !String(c.id).startsWith('local-')).length ? `<h3 class="inv-h">Add one of your characters</h3>
+        ${mine.filter((c) => !inParty.has(c.id) && !String(c.id).startsWith('tmp-') && !String(c.id).startsWith('local-')).map((c) => `<div class="gm-mem"><span>${esc(c.name || 'Unnamed')} <span class="muted small">level ${c.level || ''}</span></span><button type="button" class="btn small" data-addmine="${esc(c.id)}">Add</button></div>`).join('')}` : ''}
+      <div class="row between" style="margin-top:16px"><button type="button" class="btn danger ghost" id="mDel">Delete party</button><button type="button" class="btn primary" data-close>Done</button></div>`;
+    const upd = async (data) => { try { partyMeta = (await api('party_update', { id: partyMeta.id, ...data })).party; await loadParties(); draw(); renderParty(); } catch (e) { toast(e.message, 'error'); } };
+    $('#mName', m.body).onchange = (e) => upd({ name: e.target.value });
+    $('#mCopy', m.body).onclick = () => copy(fmtCode(partyMeta.code), 'Join code');
+    $('#mLink', m.body).onclick = () => copy(link.replace(/join=.*/, 'join=' + partyMeta.code), 'Join link');
+    $('#mNew', m.body).onclick = async () => { if (await confirmBox('Make a new join code? The old one stops working; players who already joined stay.')) upd({ newCode: true }); };
+    $('#mLock', m.body).onchange = (e) => upd({ locked: e.target.checked });
+    $$('[data-rm]', m.body).forEach((b) => (b.onclick = async () => {
+      const p = party.find((x) => x.rec.id === b.dataset.rm);
+      if (!(await confirmBox(`Remove ${p?.build.name || 'this character'} from the party?`))) return;
+      try { await api('party_remove', { id: partyMeta.id, character_id: b.dataset.rm }); since = null; await pollParty(); draw(); render(); } catch (e) { toast(e.message, 'error'); }
+    }));
+    $$('[data-addmine]', m.body).forEach((b) => (b.onclick = async () => {
+      try { await api('party_join', { code: partyMeta.code, character_id: b.dataset.addmine }); since = null; await pollParty(); draw(); render(); } catch (e) { toast(e.message, 'error'); }
+    }));
+    $('#mDel', m.body).onclick = async () => {
+      if (!(await confirmBox(`Delete the party “${partyMeta.name}”? Characters stay with their players.`))) return;
+      try { await api('party_delete', { id: partyMeta.id }); m.close(); setActive(null); await loadParties(); if (activeParty) await pollParty(); render(); } catch (e) { toast(e.message, 'error'); }
+    };
+    $('[data-close]', m.body).onclick = m.close;
+  };
+  draw();
+}
+function wireParty() {
+  $$('[data-pc]').forEach((b) => (b.onclick = () => openPc(party[Number(b.dataset.pc)])));
+  const np = $('#newParty'); if (np) np.onclick = createParty;
+  const sel = $('#partySel');
+  if (sel) sel.onchange = async () => {
+    if (sel.value === '__new') { sel.value = activeParty || ''; createParty(); return; }
+    setActive(sel.value); await pollParty(); render();
+  };
+  const mg = $('#partyManage'); if (mg) mg.onclick = openManage;
+  const pc = $('#partyCode'); if (pc) pc.onclick = () => (partyMeta.locked ? openManage() : copy(fmtCode(partyMeta.code), 'Join code'));
+}
+
 // ------------------------------------------------------------------ render
 async function render() {
   const c = enc.list.find((x) => x.id === enc.sel) || enc.list[0] || null;
@@ -308,15 +454,14 @@ async function render() {
   const sb = c ? await statblock(c.slug) : null;
   main.innerHTML = `
     <div class="gm-grid">
-      <aside class="gm-col gm-party card tight"><div class="row between"><h2 class="label" style="margin:0">Party</h2><button type="button" class="icon-btn" id="partyRefresh" aria-label="Refresh party" title="Refresh">⟳</button></div>${partyHtml()}</aside>
+      <aside class="gm-col gm-party card tight">${partyColumn()}</aside>
       <section class="gm-col gm-enc card tight">${encounterHtml()}</section>
       <aside class="gm-col gm-sb card tight">${sb ? statblockHtml(sb, c) : '<p class="muted">Select a creature to see its statblock.</p>'}</aside>
     </div>`;
   wire(c);
 }
 function wire(c) {
-  $$('[data-pc]').forEach((b) => (b.onclick = () => openPc(party[Number(b.dataset.pc)])));
-  $('#partyRefresh').onclick = async () => { await loadParty(); render(); toast('Party updated'); };
+  wireParty();
   $('.gm-enc-name').onchange = (e) => { enc.name = e.target.value; save(); };
   $$('[data-pl]').forEach((b) => (b.onclick = () => { enc.partyLevel = Math.max(-1, Math.min(25, partyLevel() + Number(b.dataset.pl))); save(); render(); }));
   $$('[data-ps]').forEach((b) => (b.onclick = () => { enc.partySize = Math.max(1, Math.min(10, partySize() + Number(b.dataset.ps))); save(); render(); }));
