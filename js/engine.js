@@ -54,6 +54,9 @@ export function normalizeBuild(b0) {
   return b;
 }
 
+/** A situational modifier's id, the same from level to level: "label|type|source". */
+export const noteId = (n) => `${n.label}|${n.type}|${n.source || ''}`;
+
 /** Option set that checks two sets (actor + item options) without copying. */
 class UnionSet {
   constructor(a, b) { this.a = a; this.b = b; }
@@ -785,10 +788,18 @@ export class Engine {
       for (const r of rec.rules || []) if (r.key === 'FlatModifier') ch.effectRules.push({ r, inst: { rec, sel: {}, key: 'effect:' + rec.slug } });
     }
     const cond = this._conditionMods(state.conditions || []);
+    // Situational modifiers the player ticked on the sheet (state.situational[stat] = [note ids]) count as applied.
+    const ticked = state.situational || {};
     const statMods = (stat, attr, extraSel = []) => {
       const sel = [stat, ...extraSel, 'all', attr ? attr + '-based' : null].filter(Boolean);
       const { mods, notes } = this._mods(ch, sel, state);
-      return { mods: stat === 'land-speed' ? mods : [...mods, ...cond(stat, attr)], notes };
+      const out = stat === 'land-speed' ? mods : [...mods, ...cond(stat, attr)];
+      const on = ticked[stat] || [];
+      for (const n of notes) {
+        n.id = noteId(n);
+        if (on.includes(n.id)) { n.on = true; out.push({ label: n.label, value: n.value, type: n.type, source: n.source, situational: true }); }
+      }
+      return { mods: out, notes };
     };
 
     // Inventory

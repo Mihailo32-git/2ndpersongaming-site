@@ -1327,3 +1327,16 @@ html[data-theme="light"] .inv-tabs button[aria-selected=true] { background: #fff
 html[data-theme="light"] .modal, html[data-theme="light"] .acct-menu, html[data-theme="light"] .toast { box-shadow: 0 18px 50px rgba(20, 30, 50, .18); }
 html[data-theme="light"] .gm-enc-top .gm-enc-name { background: transparent; border-color: transparent; }
 html[data-theme="light"] .gm-enc-top .gm-enc-name:hover, html[data-theme="light"] .gm-enc-top .gm-enc-name:focus { border-color: var(--line2); background: #fff; }
+/* situational modifiers ticked on; favorite effects */
+.sit-list { display: flex; flex-direction: column; gap: 6px; }
+.sit-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; min-height: 48px; border-radius: 10px; border: 1px solid var(--glass-line2); background: rgba(var(--ov), .03); cursor: pointer; }
+.sit-row input { width: 20px; height: 20px; flex: 0 0 20px; accent-color: var(--accent); }
+.sit-row.on { border-color: var(--accent-line); background: var(--accent-soft); }
+.stat-table tr.sit-mod td { color: var(--accent); }
+.sit-mark { color: var(--accent); font-weight: 700; font-size: 12px; margin-left: 2px; }
+.sk-mod.sit-on, .tile.sit-on .tile-value { color: var(--accent); }
+.tile .sit-mark { margin-left: auto; margin-right: 4px; }
+.step.fav { font-size: 15px; color: var(--muted); }
+.step.fav.on { color: var(--hero); }
+.fav-effs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.fav-effs .chip-btn { min-height: 30px; padding: 4px 10px; font-size: 12.5px; border-style: dashed; }

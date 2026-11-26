@@ -52,9 +52,10 @@ if (!readOnly && charRec.id && store.conflictFor(charRec.id)) {
 }
 const build = normalizeBuild(charRec.build);
 const state = Object.assign({ hp: null, temp: 0, hero: 1, focus: null, dying: 0, wounded: 0, conditions: [], effects: [], raging: false, shieldRaised: false,
-  used: {}, prep: {}, innateUsed: {}, dailyUsed: {}, notes: '', companions: {}, freqUsed: {} }, charRec.state || {});
-for (const k of ['used', 'prep', 'innateUsed', 'dailyUsed', 'companions', 'freqUsed']) state[k] = state[k] || {};
-if (state.effects.length) await db.load(['spell-effects', 'feat-effects', 'equipment-effects']);
+  used: {}, prep: {}, innateUsed: {}, dailyUsed: {}, notes: '', companions: {}, freqUsed: {}, situational: {}, favEffects: [] }, charRec.state || {});
+for (const k of ['used', 'prep', 'innateUsed', 'dailyUsed', 'companions', 'freqUsed', 'situational']) state[k] = state[k] || {};
+if (!Array.isArray(state.favEffects)) state.favEffects = [];
+if (state.effects.length || state.favEffects.length) await db.load(['spell-effects', 'feat-effects', 'equipment-effects']);
 let ch = null;
 let tab = sessionStorage.getItem('pf2e.sheetTab') || 'actions';
 document.title = (build.name || 'Character') + ' — PF2e sheet';
@@ -145,6 +146,38 @@ function compute() {
 function change(rerender = true) { compute(); saveState(); if (rerender) render(); }
 
 // ------------------------------------------------------------------ rendering helpers
+// AC, Perception, a save or a skill up close. Situational modifiers can be ticked on: they then count
+// (on the sheet, the Actions tab, the GM screen) until they're ticked off.
+function statInfo(key) {
+  const base = (st) => st.total - (st.mods || []).reduce((a, m) => a + m.value, 0);
+  if (key === 'ac') return { title: 'Armor Class', stat: ch.ac, isDC: true, label: `10 + Dex ${signed(ch.ac.dex)}${ch.ac.dexCap != null ? ' (cap ' + ch.ac.dexCap + ')' : ''} + ${RANKS[ch.ac.rank].toLowerCase()} in ${ch.ac.category}`, value: base(ch.ac) };
+  if (key === 'perception') return { title: 'Perception', stat: ch.perception, label: `Wis + ${RANKS[ch.perception.rank].toLowerCase()}`, value: base(ch.perception) };
+  if (ch.saves[key]) { const s = ch.saves[key]; return { title: titleCase(key), stat: s, label: `${ATTR_NAMES[s.attr]} + ${RANKS[s.rank].toLowerCase()}`, value: base(s) }; }
+  const st = ch.skills[key];
+  return { title: titleCase(key), stat: st, label: `${ATTR_NAMES[st.attr]} + ${RANKS[st.rank].toLowerCase()} proficiency`, value: base(st) };
+}
+function statModal(key) {
+  const m = modal(statInfo(key).title);
+  const draw = () => {
+    const { stat, isDC, label, value } = statInfo(key);
+    const notes = stat.notes || [];
+    m.body.innerHTML = `<table class="stat-table"><tr><td>${esc(label)}</td><td class="mod">${isDC ? value : signed(value)}</td></tr>
+      ${(stat.mods || []).map((x) => `<tr class="${x.situational ? 'sit-mod' : ''}"><td>${esc(x.label)} <span class="muted small">${esc(x.type)}${x.situational ? ' · situational, on' : ''}</span></td><td class="mod">${signed(x.value)}</td></tr>`).join('')}
+      <tr><th>Total</th><th class="mod">${isDC ? stat.total : signed(stat.total)}</th></tr></table>
+      ${notes.length ? `<h4 style="margin-top:14px">Situational</h4>
+        <p class="muted small" style="margin-top:0">${readOnly ? 'Ticked ones are on.' : 'Tick one while it applies: it counts until you untick it.'}</p>
+        <div class="sit-list">${notes.map((n) => `<label class="sit-row ${n.on ? 'on' : ''}"><input type="checkbox" data-sit="${esc(n.id)}" ${n.on ? 'checked' : ''} ${readOnly ? 'disabled' : ''}>
+          <span><b class="mono">${signed(n.value)}</b> ${esc(n.type)} <span class="muted">from</span> ${esc(n.label)}${n.source && n.source !== n.label ? ` <span class="muted small">(${esc(n.source)})</span>` : ''}</span></label>`).join('')}</div>` : ''}`;
+    $$('[data-sit]', m.body).forEach((c) => (c.onchange = () => {
+      const on = new Set(state.situational[key] || []);
+      if (c.checked) on.add(c.dataset.sit); else on.delete(c.dataset.sit);
+      if (on.size) state.situational[key] = [...on]; else delete state.situational[key];
+      change(); draw();
+    }));
+  };
+  draw();
+}
+const sitOn = (st) => (st?.notes || []).some((n) => n.on);
 function breakdown(title, base, stat) {
   const m = modal(title);
   const mods = stat.mods || [];
@@ -166,9 +199,11 @@ const ICON_PATHS = {
   spellatk: '<path d="M4 20L15 9"/><path d="M17 3v4M15 5h4M19.5 10.5v3M18 12h3M10 3.5v2M9 4.5h2"/>',
 };
 const icon = (k) => ICON_PATHS[k] ? `<svg class="tile-ic" viewBox="0 0 24 24" aria-hidden="true">${ICON_PATHS[k]}</svg>` : '';
-const tile = (key, label, value, rank, cls = '') => `<button type="button" class="tile ${cls}" ${key ? `data-bd="${key}"` : ''}><div class="tile-head">${icon(key)}<span class="label">${esc(label)}</span>${rank != null ? rankBadge(rank) : ''}</div><div class="tile-value">${value}</div></button>`;
+const tileStat = (key) => (key === 'ac' ? ch.ac : key === 'perception' ? ch.perception : ch.saves?.[key]);
+const tile = (key, label, value, rank, cls = '') => `<button type="button" class="tile ${cls} ${sitOn(tileStat(key)) ? 'sit-on' : ''}" ${key ? `data-bd="${key}"` : ''}><div class="tile-head">${icon(key)}<span class="label">${esc(label)}</span>${sitOn(tileStat(key)) ? '<span class="sit-mark" title="A situational bonus is on">✓</span>' : ''}${rank != null ? rankBadge(rank) : ''}</div><div class="tile-value">${value}</div></button>`;
 const initials = (n) => String(n || '').replace(/[^\p{L}\p{N}\s'-]/gu, ' ').split(/\s+/).filter((w) => /^[\p{L}\p{N}]/u.test(w)).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?';
 const mainEntry = () => ch.spellcasting.entries.find((e) => e.id === 'class') || ch.spellcasting.entries[0] || null;
+const effName = (rec, ref) => (rec?.name || ref).replace(/^(Spell )?Effect: /, '');
 
 function render() {
   if (!TABS().some((t) => t.id === tab)) tab = 'actions';
@@ -213,7 +248,8 @@ function render() {
         <div class="hc-col"><div class="row between"><h2 class="label" style="margin:0">Conditions</h2>${readOnly ? '' : '<button type="button" class="btn small" id="addCond">+ Add</button>'}</div>
         <div class="cond-list">${state.conditions.map((c, i) => { const rec = db.get('@conditions/' + c.slug); const nm = esc(rec?.name || c.slug); return `<div class="cond-row ${rec?.valued && !readOnly ? 'valued' : ''}"><button type="button" class="cond-name" data-cond="${i}">${nm}${rec?.valued ? ` <b class="mono">${c.value}</b>` : ''}</button>${readOnly ? '' : `${rec?.valued ? `<button type="button" class="step" data-cdown="${i}" aria-label="Lower ${nm}">−</button><span class="cond-val mono" aria-hidden="true">${c.value}</span><button type="button" class="step" data-cup="${i}" aria-label="Raise ${nm}">+</button><span class="grow"></span>` : ''}<button type="button" class="step x" data-crm="${i}" aria-label="Remove ${nm}">×</button>`}</div>`; }).join('') || '<span class="muted small">None</span>'}</div>
         </div><div class="hc-col"><div class="row between"><h2 class="label" style="margin:0">Effects</h2>${readOnly ? '' : '<button type="button" class="btn small" id="addEff">+ Add</button>'}</div>
-        <div class="cond-list">${state.effects.map((e, i) => { const rec = db.get(e.ref); const nm = esc((rec?.name || e.ref).replace(/^(Spell )?Effect: /, '')); return `<div class="cond-row eff"><button type="button" class="cond-name" data-show="${esc(e.ref)}">${nm}</button>${readOnly ? '' : `<button type="button" class="step x" data-erm="${i}" aria-label="Remove ${nm}">×</button>`}</div>`; }).join('') || '<span class="muted small">None</span>'}</div>
+        <div class="cond-list">${state.effects.map((e, i) => { const rec = db.get(e.ref); const nm = esc(effName(rec, e.ref)); const fav = state.favEffects.includes(e.ref); return `<div class="cond-row eff"><button type="button" class="cond-name" data-show="${esc(e.ref)}">${nm}</button>${readOnly ? '' : `<button type="button" class="step fav ${fav ? 'on' : ''}" data-efav="${esc(e.ref)}" aria-pressed="${fav}" aria-label="${fav ? 'Remove from favorites' : 'Add to favorites'}" title="${fav ? 'Favorite: one tap to add it again' : 'Favorite it, to add it again with one tap'}">${fav ? '★' : '☆'}</button><button type="button" class="step x" data-erm="${i}" aria-label="Remove ${nm}">×</button>`}</div>`; }).join('') || '<span class="muted small">None</span>'}</div>
+        ${!readOnly && state.favEffects.some((r) => !state.effects.some((e) => e.ref === r)) ? `<div class="fav-effs">${state.favEffects.filter((r) => !state.effects.some((e) => e.ref === r)).map((r) => `<button type="button" class="chip-btn small" data-efq="${esc(r)}" title="Add ${esc(effName(db.get(r), r))}">★ ${esc(effName(db.get(r), r))}</button>`).join('')}</div>` : ''}
       </div>
       </div>
     </div>
@@ -245,7 +281,7 @@ function render() {
 
     <aside class="col-right card tight" style="margin:0">
       <h2 class="label" style="margin-bottom:6px">Skills</h2>
-      ${Object.keys(SKILLS).map((s) => { const k = ch.skills[s]; return `<div class="skill-row ${k.rank ? '' : 'untrained'}" data-skill="${s}" role="button" tabindex="0">${rankBadge(k.rank)}<span class="sk-name">${esc(titleCase(s))}${k.notes.length ? ' <span class="warn" title="Has situational modifiers">*</span>' : ''}</span><span class="sk-mod">${signed(k.total)}</span></div>`; }).join('')}
+      ${Object.keys(SKILLS).map((s) => { const k = ch.skills[s]; return `<div class="skill-row ${k.rank ? '' : 'untrained'}" data-skill="${s}" role="button" tabindex="0">${rankBadge(k.rank)}<span class="sk-name">${esc(titleCase(s))}${sitOn(k) ? ' <span class="sit-mark" title="A situational bonus is on">✓</span>' : k.notes.length ? ' <span class="warn" title="Has situational modifiers: tap to tick one on">*</span>' : ''}</span><span class="sk-mod ${sitOn(k) ? 'sit-on' : ''}">${signed(k.total)}</span></div>`; }).join('')}
       ${Object.entries(ch.lores).map(([n, l]) => `<div class="skill-row">${rankBadge(l.rank)}<span class="sk-name">${esc(/lore$/i.test(n) ? n : n + ' Lore')}</span><span class="sk-mod">${signed(l.total)}</span></div>`).join('')}
       <h2 class="label" style="margin:14px 0 6px">Proficiencies</h2>
       <table class="stat-table small">
@@ -884,8 +920,7 @@ function wire() {
   $$('[data-bd]', main).forEach((p) => (p.onclick = () => {
     const k = p.dataset.bd;
     const base = (st) => st.total - (st.mods || []).reduce((a, m) => a + m.value, 0);
-    if (k === 'ac') breakdown('Armor Class', { label: `10 + Dex ${signed(ch.ac.dex)}${ch.ac.dexCap != null ? ' (cap ' + ch.ac.dexCap + ')' : ''} + ${RANKS[ch.ac.rank].toLowerCase()} in ${ch.ac.category}`, value: base(ch.ac) }, ch.ac);
-    else if (k === 'perception') breakdown('Perception', { label: `Wis + ${RANKS[ch.perception.rank].toLowerCase()}`, value: base(ch.perception) }, ch.perception);
+    if (k === 'ac' || k === 'perception') statModal(k);
     else if (k === 'classdc') breakdown('Class DC', { label: `10 + ${ATTR_NAMES[ch.classDC.attr]} + ${RANKS[ch.classDC.rank].toLowerCase()}`, value: ch.classDC.total }, { total: ch.classDC.total, mods: [] });
     else if (k === 'spelldc' || k === 'spellatk') {
       const e = mainEntry();
@@ -893,12 +928,12 @@ function wire() {
       m.body.innerHTML = `<p>${esc(titleCase(e.trad || ''))} ${esc(e.type)} spellcasting with ${esc(attrLabel(e.attr))}, ${RANKS[e.rank].toLowerCase()} proficiency.</p>
         <table class="stat-table"><tr><td>Spell attack</td><td class="mod">${signed(e.attack)}</td></tr><tr><td>Spell DC</td><td class="mod">${e.dc}</td></tr></table>
         ${ch.spellcasting.entries.length > 1 ? `<h4 style="margin-top:12px">Other spellcasting</h4><table class="stat-table">${ch.spellcasting.entries.filter((x) => x !== e).map((x) => `<tr><td>${esc(x.label)}</td><td class="mod">${signed(x.attack)}</td><td class="mod">${x.dc}</td></tr>`).join('')}</table>` : ''}`;
-    } else { const s = ch.saves[k]; breakdown(titleCase(k), { label: `${ATTR_NAMES[s.attr]} + ${RANKS[s.rank].toLowerCase()}`, value: base(s) }, s); }
+    } else statModal(k);
   }));
   $$('[data-skill]', main).forEach((row) => {
     const open = () => {
       const s = row.dataset.skill, st = ch.skills[s];
-      breakdown(titleCase(s), { label: `${ATTR_NAMES[st.attr]} + ${RANKS[st.rank].toLowerCase()} proficiency`, value: st.total - (st.mods || []).reduce((a, m) => a + m.value, 0) }, st);
+      statModal(s);
     };
     row.onclick = open;
     row.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
@@ -951,6 +986,13 @@ function wire() {
   $$('[data-cdown]', main).forEach((b) => (b.onclick = () => { const c = state.conditions[Number(b.dataset.cdown)]; c.value--; if (c.value <= 0) state.conditions.splice(Number(b.dataset.cdown), 1); change(); }));
   $$('[data-crm]', main).forEach((b) => (b.onclick = () => { state.conditions.splice(Number(b.dataset.crm), 1); change(); }));
   $$('[data-erm]', main).forEach((b) => (b.onclick = () => { state.effects.splice(Number(b.dataset.erm), 1); change(); }));
+  // Favorite effects: star one, then add it again with one tap whenever it comes up (Rage, Heroism…).
+  $$('[data-efav]', main).forEach((b) => (b.onclick = () => {
+    const r = b.dataset.efav;
+    state.favEffects = state.favEffects.includes(r) ? state.favEffects.filter((x) => x !== r) : [...state.favEffects, r];
+    saveState(); render();
+  }));
+  $$('[data-efq]', main).forEach((b) => (b.onclick = () => { state.effects.push({ ref: b.dataset.efq }); change(); }));
   $('#addCond').onclick = () => {
     const common = ['frightened', 'off-guard', 'prone', 'grabbed', 'sickened', 'clumsy', 'enfeebled', 'stupefied', 'drained', 'slowed', 'stunned', 'quickened', 'concealed', 'hidden', 'fatigued', 'persistent-damage'];
     const items = db.list('conditions').map((c) => ({ key: c.slug, name: c.name, rec: c, group: common.includes(c.slug) ? 'Common in combat' : 'All conditions', meta: c.valued ? 'Has a value' : '' }))
@@ -968,7 +1010,8 @@ function wire() {
   $('#addEff').onclick = async () => {
     await db.load(['spell-effects', 'feat-effects', 'equipment-effects']);
     const items = [...db.list('spell-effects'), ...db.list('feat-effects'), ...db.list('equipment-effects')].map((e) => ({ key: refOf(e), name: e.name.replace(/^(Spell )?Effect: /, ''), rec: e, meta: esc(titleCase(e._pack.replace('-effects', ''))) }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .map((it) => (state.favEffects.length ? { ...it, group: state.favEffects.includes(it.key) ? '★ Favorites' : 'All effects' } : it))
+      .sort((a, b) => (a.group === b.group ? 0 : a.group === '★ Favorites' ? -1 : b.group === '★ Favorites' ? 1 : 0) || a.name.localeCompare(b.name));
     openDrawer({
       title: 'Add an effect', db, items, placeholder: 'Search effects (heroism, inspire, mutagen…)', limit: 300,
       chips: [{ id: 'all', label: 'All' }, { id: 'spell', label: 'Spells', test: (i) => i.rec._pack === 'spell-effects' }, { id: 'feat', label: 'Feats', test: (i) => i.rec._pack === 'feat-effects' }, { id: 'eq', label: 'Items', test: (i) => i.rec._pack === 'equipment-effects' }],

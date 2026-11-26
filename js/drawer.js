@@ -75,8 +75,15 @@ export function openDrawer(opts) {
   const visible = () => {
     const q = st.q.trim().toLowerCase();
     const chip = o.chips.find((c) => c.id === st.chip);
-    return o.items.filter((it) => (!q || it.name.toLowerCase().includes(q)) && (!chip || !chip.test || chip.test(it))
+    const out = o.items.filter((it) => (!q || it.name.toLowerCase().includes(q)) && (!chip || !chip.test || chip.test(it))
       && (!o.hideDisabled || st.unavail || !it.disabled || it.key === o.selected));
+    if (!q) return out;
+    // Best matches first within each group: "rage" puts Rage before Armored Courage.
+    const groupAt = new Map();
+    out.forEach((it) => { if (!groupAt.has(it.group)) groupAt.set(it.group, groupAt.size); });
+    const rank = (n) => { n = n.toLowerCase(); return n === q ? 0 : n.startsWith(q) ? 1 : n.split(/[\s(:,-]+/).some((w) => w.startsWith(q)) ? 2 : 3; };
+    return out.map((it, i) => ({ it, i, g: groupAt.get(it.group), r: rank(it.name) }))
+      .sort((a, b) => a.g - b.g || a.r - b.r || a.i - b.i).map((x) => x.it);
   };
   const draw = () => {
     const items = visible();
