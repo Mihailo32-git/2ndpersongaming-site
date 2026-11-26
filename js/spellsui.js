@@ -221,7 +221,9 @@ function wire(root, ctx) {
   })));
   $$('[data-innatepick]', root).forEach((b) => (b.onclick = () => {
     const o = JSON.parse(b.dataset.innatepick);
-    openSpellPicker(db, { title: `${ordinal(o.rank)}-rank innate spell`, trad: o.trad, rank: o.rank, cantrips: false }, (s) => {
+    // Archetypes that limit the choice ("must have the illusion or mental trait") get only those spells.
+    const only = o.traits ? innatePickOptions(db, { trad: o.trad, rank: o.rank }, build.options?.showRare !== false).filter((s) => (s.traits || []).some((t) => o.traits.includes(t))).map(refOf) : null;
+    openSpellPicker(db, { title: `${ordinal(o.rank)}-rank innate spell${o.traits ? ' (' + o.traits.join(' or ') + ')' : ''}`, trad: o.trad, rank: o.rank, cantrips: false, ...(only ? { only } : {}) }, (s) => {
       build.spells.innate = build.spells.innate || {};
       build.spells.innate[o.feat] = Object.assign({}, build.spells.innate[o.feat] || {}, { [o.rank]: refOf(s) });
       ctx.update();

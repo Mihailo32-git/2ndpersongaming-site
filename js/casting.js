@@ -422,7 +422,7 @@ export function buildSpellcasting(engine, ch, statMods) {
       if (L < lvl) continue;
       const r = picks[rank];
       const x = r ? ref(r) : null;
-      out.innate.push({ ...(x && valid(x) ? x : { ref: null, rec: null }), rank, pickFor: { feat: f.rec.slug, rank, trad: f.rec.archCasting.trad }, source: f.rec.name, trad: f.rec.archCasting.trad, attr: 'cha', ...innStats() });
+      out.innate.push({ ...(x && valid(x) ? x : { ref: null, rec: null }), rank, pickFor: { feat: f.rec.slug, rank, trad: f.rec.archCasting.trad, traits: f.rec.archCasting.traits || null }, source: f.rec.name, trad: f.rec.archCasting.trad, attr: 'cha', ...innStats() });
     }
   }
   for (const x of sp.innateExtra || []) {
