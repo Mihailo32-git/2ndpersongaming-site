@@ -378,7 +378,7 @@ function spentLine(p) {
   const st = p.state || {};
   const parts = [];
   for (const g of innateGroups(p.ch, st)) parts.push(g.spells.length
-    ? `<span title="${esc(g.source)} spells (once a day each) left today">✧ ${esc(g.source)} ${g.spells.filter((x) => !x.used).length}/${g.spells.length}</span>`
+    ? `<span title="${esc(g.source)} spell casts left today">✧ ${esc(g.source)} ${g.spells.reduce((a, x) => a + x.left, 0)}/${g.spells.reduce((a, x) => a + x.max, 0)}</span>`
     : `<span class="gm-warn" title="${esc(g.source)}: spells not chosen yet (builder, Spells step)">✧ ${esc(g.source)} not chosen</span>`);
   for (const d of dailyList(p.ch, st)) parts.push(`<span title="${esc(d.label)}">⚗ ${d.left}/${d.max}</span>`);
   const al = alchemyInfo(p.ch, st);
@@ -444,7 +444,7 @@ function openPc(p) {
       <div><h3 class="inv-h">Resources</h3>
         <p class="small">Hero points <b>${p.state.hero || 0}</b>${fmax ? ` · Focus <b>${p.state.focus ?? fmax}/${fmax}</b>` : ''}</p>
         ${res.map((e) => `<p class="small"><span class="muted">${esc(e.label)}</span><br>${Object.entries(e.ranks).map(([r, [l, t]]) => `<span class="gm-slot ${l ? '' : 'out'}">${ordinal(r)} <b>${l}</b>/${t}</span>`).join(' ')}</p>`).join('') || (ch.spellcasting?.any || !alchemyInfo(ch, p.state || {}).vials ? '<p class="muted small">No spell slots.</p>' : '')}
-        ${innateGroups(ch, p.state).map((g) => `<p class="small"><span class="muted">${esc(g.source)} spells (once a day each)</span><br>${g.spells.map((x) => `<span class="gm-slot ${x.used ? 'out' : ''}" title="${x.used ? 'Used today' : 'Available'}">${x.rank ? ordinal(x.rank) + ' ' : ''}${esc(x.name)}</span>`).join(' ')}${g.unpicked.map((r) => ` <span class="gm-slot out" title="Not chosen yet: the player picks it in the builder (Spells step)">${ordinal(r)} not chosen</span>`).join('')}</p>`).join('')}
+        ${innateGroups(ch, p.state).map((g) => `<p class="small"><span class="muted">${esc(g.source)} spells (${g.spells.some((x) => x.max > 1) ? 'casts left today' : 'once a day each'})</span><br>${g.spells.map((x) => `<span class="gm-slot ${x.used ? 'out' : ''}" title="${x.used ? 'Used today' : x.max > 1 ? `${x.left} of ${x.max} left today` : 'Available'}">${x.rank ? ordinal(x.rank) + ' ' : ''}${esc(x.name)}${x.max > 1 ? ` <b>${x.left}</b>/${x.max}` : ''}</span>`).join(' ')}${g.unpicked.map((r) => ` <span class="gm-slot out" title="Not chosen yet: the player picks it in the builder (Spells step)">${ordinal(r)} not chosen</span>`).join('')}</p>`).join('')}
         ${daily.map((d) => `<p class="small"><span class="muted">${esc(d.label)}</span> <b>${d.left}</b>/${d.max} left</p>`).join('')}
         ${alchemyHtml(ch, p.state)}</div>
     </div>

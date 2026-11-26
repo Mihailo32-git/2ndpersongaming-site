@@ -12,7 +12,7 @@ import { slotRows, ordinal, spellList, isCantrip, attrLabel } from './casting.js
 import { openSpellPicker, rarityBadge } from './pickers.js';
 import { openDrawer } from './drawer.js';
 import { renderCompanions } from './companion-ui.js';
-import { parseFreq, freqText, limitedList, RESET_TIERS, hasAlchemy, alchemyInfo, isAlchemyCraft, formulaFamily } from './uses.js';
+import { parseFreq, freqText, limitedList, RESET_TIERS, hasAlchemy, alchemyInfo, isAlchemyCraft, formulaFamily, innateUsedCount } from './uses.js';
 import { portraitSrc, pickImage, makePortrait } from './portrait.js';
 import { loadRunes, runeKind, itemRunes, materialLabel, runeRef } from './runes.js';
 import { openRuneManager } from './runes-ui.js';
@@ -55,7 +55,7 @@ if (!readOnly && charRec.id && store.conflictFor(charRec.id)) {
 }
 const build = normalizeBuild(charRec.build);
 const state = Object.assign({ hp: null, temp: 0, hero: 1, focus: null, dying: 0, wounded: 0, conditions: [], effects: [], raging: false, shieldRaised: false,
-  used: {}, prep: {}, innateUsed: {}, dailyUsed: {}, notes: '', companions: {}, freqUsed: {}, situational: {}, favEffects: [], favActions: [], alchemy: {}, toggles: {} }, charRec.state || {});
+  used: {}, prep: {}, innateUsed: {}, dailyUsed: {}, notes: '', companions: {}, freqUsed: {}, situational: {}, favEffects: [], favActions: [], alchemy: {}, toggles: {}, staff: null }, charRec.state || {});
 // Maps saved by older versions of the server can come back as lists ({} became []): turn them back into maps.
 for (const k of ['used', 'prep', 'innateUsed', 'dailyUsed', 'companions', 'freqUsed', 'situational', 'alchemy', 'toggles']) state[k] = asObj(state[k]);
 for (const k of Object.keys(state.prep)) state.prep[k] = asObj(state.prep[k]);
@@ -559,6 +559,49 @@ function spellRow(s, { extra = '', cast = false, actions = '' } = {}) {
   return `<div class="spell-line ${cast ? 'cast' : ''}"><span class="glyph">${actionGlyph(r)}</span><span class="name" data-show="${esc(s.ref)}">${esc(r?.name || s.ref)}</span>${extra}<span class="grow"></span>${actions}
     ${sub.length ? `<div class="sub">${esc(sub.join(' · '))}</div>` : ''}</div>`;
 }
+// Staves: spells cast by spending charges. Preparing one at daily preparations gives it charges equal to the
+// highest rank of spell you can cast (one staff a day); a spell costs charges equal to its rank, cantrips are free.
+// state.staff = { id (inventory item), left, max }.
+function staffMaxCharges() {
+  const sc = ch.spellcasting;
+  const slotRanks = sc.entries.map((e) => e.maxRank || 0);
+  return Math.max(0, ...(slotRanks.length ? slotRanks : sc.innate.map((s) => s.rank || 0)));
+}
+const carriedStaves = () => ch.inventory.filter((it) => it.rec.staffSpells);
+const wieldedStaves = () => carriedStaves().filter((it) => it.equipped && invKind(it.rec).slot === 'hands');
+function prepareStaff(it) { const n = staffMaxCharges(); state.staff = it && n ? { id: it.id, left: n, max: n } : null; }
+function staffHtml(it) {
+  const sc = ch.spellcasting;
+  const n0 = staffMaxCharges();
+  const prepared = !!(state.staff && state.staff.id === it.id);
+  const left = prepared ? Math.max(0, Number(state.staff.left) || 0) : 0;
+  const max = prepared ? Math.max(left, Number(state.staff.max) || 0) : 0;
+  const trads = new Set(sc.entries.map((e) => e.trad).filter(Boolean));
+  const onList = (rec) => !trads.size || (rec.trad || []).some((t) => trads.has(t));
+  const spont = sc.entries.find((e) => e.type === 'spontaneous' && Object.keys(e.slots || {}).length);
+  let h = `<section class="card staff-card" style="background:transparent"><div class="sc-head"><h3><span class="name" data-show="${esc(refOf(it.rec))}">${esc(it.rec.name)}</span></h3><div class="sc-stats"><span class="sc-stat">Staff</span>${prepared ? `<span class="sc-stat">Charges<b>${left}/${max}</b></span>` : ''}</div></div>`;
+  if (!prepared) {
+    h += `<p class="notice small">${n0 ? `Not prepared today. One staff a day gets charges equal to the highest rank of spell you can cast: <b>${n0}</b>.` : 'You need to be able to cast spells to prepare a staff.'}
+      ${n0 && !readOnly ? `<br><button type="button" class="btn small primary" data-staffprep="${esc(it.id)}" style="margin-top:6px">Prepare (${n0} charge${n0 === 1 ? '' : 's'})</button>` : ''}</p>`;
+  } else {
+    h += `<div class="rank-block"><div class="rank-head"><span class="rk">Charges</span><span class="slot-pips" aria-label="${left} of ${max} charges left">${Array.from({ length: max }, (_, i) => `<button type="button" class="${i < max - left ? 'used' : ''}" data-staffpip="${i}" aria-label="Charge ${i + 1}" ${readOnly ? 'disabled' : ''}></button>`).join('')}</span><span class="small muted">${left}/${max}</span>
+      ${readOnly ? '' : `<button type="button" class="btn small" data-staffadd title="${sc.entries.some((e) => e.type === 'prepared') ? 'Prepared casters: expend a spell slot when you prepare the staff to add charges equal to its rank' : 'Add a charge'}">+1</button>`}</div></div>`;
+  }
+  for (const [rank, refs] of it.rec.staffSpells) {
+    const list = refs.map((r) => ({ ref: r, rec: db.get(r) })).filter((x) => x.rec);
+    if (!list.length) continue;
+    const slotsLeft = spont && rank ? (spont.slots[rank] || 0) - ((state.used[spont.id] || {})[rank] || 0) : 0;
+    h += `<div class="rank-block"><div class="rank-head"><span class="rk">${rank ? ordinal(rank) : 'Cantrips'}</span><span class="small muted">${rank ? `${rank} charge${rank > 1 ? 's' : ''}` : `free · heightened to ${sc.cantripRank}`}</span></div>`;
+    h += list.map((x) => spellRow(x, {
+      extra: onList(x.rec) ? '' : ' <span class="badge" title="You can cast a spell from a staff only if it’s on your spell list">not on your list</span>',
+      actions: !rank || readOnly ? '' : `<button type="button" class="btn small" data-staffcast="${rank}" ${prepared && left >= rank ? '' : 'disabled'}>Cast</button>`
+        + (spont && spont.slots[rank] ? ` <button type="button" class="btn small" data-staffslot="${rank}" title="Spend 1 charge and one of your ${ordinal(rank)}-rank spell slots" ${prepared && left >= 1 && slotsLeft > 0 ? '' : 'disabled'}>1 + slot</button>` : ''),
+    })).join('');
+    h += `</div>`;
+  }
+  if (spont) h += `<p class="small muted">${esc(spont.label)}: you can also cast a staff spell by spending 1 charge and one of your spell slots of the spell’s rank (<b>1 + slot</b>).</p>`;
+  return h + `</section>`;
+}
 TAB_RENDER.spells = (el) => {
   const sc = ch.spellcasting;
   let html = '';
@@ -618,10 +661,17 @@ TAB_RENDER.spells = (el) => {
       ${unpickedInnate.length ? `<p class="notice small">${esc([...new Set(unpickedInnate.map((s) => s.source))].join(', '))}: ${unpickedInnate.map((s) => ordinal(s.rank)).join(', ')}-rank spell${unpickedInnate.length > 1 ? 's' : ''} not chosen yet. ${readOnly ? '' : `<a href="builder.html?id=${encodeURIComponent(charRec.id)}">Pick ${unpickedInnate.length > 1 ? 'them' : 'it'} in the builder</a> (Spells step).`}</p>` : ''}
       ${sc.innate.filter((s) => s.rec).map((s) => {
         const c = isCantrip(s.rec);
-        const usedToday = !!state.innateUsed[s.ref];
-        return spellRow(s, { cast: !c && usedToday, extra: ` <span class="badge">${c ? 'cantrip' : ordinal(s.rank) + ' · 1/day'}</span> <span class="small muted">${esc(s.source)} · DC ${s.dc}</span>`, actions: !c && !readOnly ? `<button type="button" class="btn small" data-innate="${esc(s.ref)}">${usedToday ? 'Undo' : 'Cast'}</button>` : '' });
+        const max = s.perDay || 1;
+        const u = Math.min(max, innateUsedCount(state, s.ref));
+        const usedToday = u >= max;
+        // More than once a day (Captivating Intensity): one pip per cast, like spell slots.
+        const acts = c || readOnly ? '' : max > 1
+          ? `<span class="slot-pips" aria-label="${max - u} of ${max} left today">${Array.from({ length: max }, (_, i) => `<button type="button" class="${i < u ? 'used' : ''}" data-innatepip='${esc(JSON.stringify({ r: s.ref, i }))}' aria-label="Cast ${i + 1}${i < u ? ' (used)' : ''}"></button>`).join('')}</span><span class="small muted">${max - u}/${max}</span>`
+          : `<button type="button" class="btn small" data-innate="${esc(s.ref)}">${usedToday ? 'Undo' : 'Cast'}</button>`;
+        return spellRow(s, { cast: !c && usedToday, extra: ` <span class="badge">${c ? 'cantrip' : ordinal(s.rank) + ' · ' + max + '/day'}</span> <span class="small muted">${esc(s.source)} · DC ${s.dc}</span>`, actions: acts });
       }).join('')}</section>`;
   }
+  for (const it of wieldedStaves()) html += staffHtml(it);
   if (!html) html = '<p class="muted">No spells yet. Pick them in the builder.</p>';
   el.innerHTML = html;
   if (readOnly) return;
@@ -640,7 +690,29 @@ TAB_RENDER.spells = (el) => {
   }));
   $$('[data-prep]', el).forEach((b) => (b.onclick = () => openPrepPicker(JSON.parse(b.dataset.prep))));
   $$('[data-focuscast]', el).forEach((b) => (b.onclick = () => { if (state.focus > 0) { state.focus--; change(); } }));
-  $$('[data-innate]', el).forEach((b) => (b.onclick = () => { const r = b.dataset.innate; if (state.innateUsed[r]) delete state.innateUsed[r]; else state.innateUsed[r] = true; change(); }));
+  $$('[data-innate]', el).forEach((b) => (b.onclick = () => { const r = b.dataset.innate; if (state.innateUsed[r]) delete state.innateUsed[r]; else state.innateUsed[r] = 1; change(); }));
+  const st = state.staff;
+  $$('[data-staffprep]', el).forEach((b) => (b.onclick = () => { prepareStaff(ch.inventory.find((it) => it.id === b.dataset.staffprep)); change(); }));
+  $$('[data-staffpip]', el).forEach((b) => (b.onclick = () => {
+    const i = Number(b.dataset.staffpip); const u = st.max - st.left;
+    st.left = st.max - (i < u ? i : i + 1); change();
+  }));
+  $$('[data-staffadd]', el).forEach((b) => (b.onclick = () => { st.max++; st.left++; change(); }));
+  $$('[data-staffcast]', el).forEach((b) => (b.onclick = () => { const r = Number(b.dataset.staffcast); if (st.left >= r) { st.left -= r; change(); } }));
+  $$('[data-staffslot]', el).forEach((b) => (b.onclick = () => {
+    const r = Number(b.dataset.staffslot);
+    const e = ch.spellcasting.entries.find((x) => x.type === 'spontaneous' && Object.keys(x.slots || {}).length);
+    const u = (state.used[e.id] = state.used[e.id] || {});
+    if (st.left < 1 || (u[r] || 0) >= (e.slots[r] || 0)) return;
+    st.left -= 1; u[r] = (u[r] || 0) + 1; change();
+  }));
+  $$('[data-innatepip]', el).forEach((b) => (b.onclick = () => {
+    const o = JSON.parse(b.dataset.innatepip);
+    const cur = innateUsedCount(state, o.r);
+    const n = o.i < cur ? o.i : o.i + 1;
+    if (n) state.innateUsed[o.r] = n; else delete state.innateUsed[o.r];
+    change();
+  }));
 };
 
 /** Daily preparation: choose the spell for one prepared slot. */
@@ -1230,6 +1302,8 @@ function wire() {
   if (pBtn) pBtn.onclick = () => (portraitSrc(build.portrait) ? portraitModal() : choosePortrait());
   $('#restBtn').onclick = () => {
     state.hp = ch.hp.max; state.temp = 0; state.focus = ch.spellcasting.focus.max || ch.focusMax; state.used = {}; state.innateUsed = {}; state.dailyUsed = {}; state.raging = false; state.shieldRaised = false;
+    // Daily preparations: the staff in hand (or the one carried) is prepared with fresh charges.
+    prepareStaff(wieldedStaves()[0] || carriedStaves()[0]);
     // Limited uses come back too, except weekly (and longer) ones.
     const keep = {}; for (const x of limitedList(ch, state)) if (x.tier > 4 && x.used) keep[x.slug] = x.used; state.freqUsed = keep;
     for (const e of Object.values(state.prep)) for (const p of Object.values(e)) if (p) p.cast = false;

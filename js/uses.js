@@ -46,9 +46,18 @@ export function limitedList(ch, state) {
 /** Innate spells cast once a day: [{name, ref, rank, used}] (cantrips left out). */
 // Where an innate spell comes from, said short: "Basic Captivator Spellcasting" → "Captivator".
 const sourceLabel = (src) => String(src || 'Innate').replace(/^(Basic|Expert|Master|Legendary)\s+/, '').replace(/\s+(Spellcasting|Dedication)$/, '') || 'Innate';
+/** Times an innate spell has been cast today (state.innateUsed[ref]: a count; older saves have true for once). */
+export function innateUsedCount(state, ref) {
+  const v = ((state && state.innateUsed) || {})[ref];
+  return v === true ? 1 : Math.max(0, Number(v) || 0);
+}
 export function innateList(ch, state) {
   return (ch.spellcasting?.innate || []).filter((s) => s.rec && !(s.rec.traits || []).includes('cantrip') && !s.rec.cantrip)
-    .map((s) => ({ name: s.rec.name, ref: s.ref, rank: s.rank, source: sourceLabel(s.source), used: !!(state.innateUsed || {})[s.ref] }));
+    .map((s) => {
+      const max = s.perDay || 1;
+      const n = Math.min(max, innateUsedCount(state, s.ref));
+      return { name: s.rec.name, ref: s.ref, rank: s.rank, source: sourceLabel(s.source), max, left: max - n, used: n >= max };
+    });
 }
 /** innateList grouped by where the spells come from: [{source, spells, unpicked}] (unpicked: ranks of an
  * archetype like Captivator whose spell hasn't been chosen in the builder yet) */

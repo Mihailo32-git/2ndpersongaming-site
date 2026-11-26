@@ -64,6 +64,9 @@ export function attrLabel(a) { return { str: 'Strength', dex: 'Dexterity', con: 
 export function ordinal(n) { n = Number(n); return n === 0 ? 'Cantrip' : n + (n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'); }
 
 /** Spells a caster of this tradition could put in a slot of `rank` (or cantrips when rank = 0). */
+/** Feats that add casts a day to an archetype's innate spells (the feat text has no rules to read this from). */
+const INNATE_EXTRA = [{ feat: 'captivating-intensity', arch: 'captivator', extra: 1, exceptTop: 2 }];
+
 /** Does a spell fit an innate pick like "one common cantrip from the arcane list" or "one 2nd-rank or lower occult spell"? */
 export function fitsInnatePick(rec, p) {
   if (!rec || rec.ritual || isFocusLike(rec)) return false;
@@ -416,13 +419,25 @@ export function buildSpellcasting(engine, ch, statMods) {
     });
   }
   for (const x of innateFromItems) pushInnate({ ref: x.ref, rec: x.rec }, x.it, x.g);
-  for (const f of archFeats.filter((x) => x.rec.archCasting.role === 'innate')) {
+  // Feats that let archetype innate spells be cast more often. Captivating Intensity: each captivator spell
+  // once more a day, except the two highest-ranked ones.
+  const innFeats = archFeats.filter((x) => x.rec.archCasting.role === 'innate');
+  const perDayFor = (arch, rank) => {
+    let n = 1;
+    for (const e of INNATE_EXTRA) {
+      if (e.arch !== arch || !owned.has(e.feat)) continue;
+      const ranks = [...new Set(innFeats.filter((x) => x.rec.arch === arch).flatMap((x) => (x.rec.archCasting.ranks || []).filter(([lvl]) => L >= lvl).map(([, r]) => r)))].sort((a, b) => b - a);
+      if (!ranks.slice(0, e.exceptTop).includes(rank)) n += e.extra;
+    }
+    return n;
+  };
+  for (const f of innFeats) {
     const picks = ((sp.innate || {})[f.rec.slug]) || {};
     for (const [lvl, rank] of f.rec.archCasting.ranks || []) {
       if (L < lvl) continue;
       const r = picks[rank];
       const x = r ? ref(r) : null;
-      out.innate.push({ ...(x && valid(x) ? x : { ref: null, rec: null }), rank, pickFor: { feat: f.rec.slug, rank, trad: f.rec.archCasting.trad, traits: f.rec.archCasting.traits || null }, source: f.rec.name, trad: f.rec.archCasting.trad, attr: 'cha', ...innStats() });
+      out.innate.push({ ...(x && valid(x) ? x : { ref: null, rec: null }), rank, pickFor: { feat: f.rec.slug, rank, trad: f.rec.archCasting.trad, traits: f.rec.archCasting.traits || null }, perDay: perDayFor(f.rec.arch, rank), source: f.rec.name, trad: f.rec.archCasting.trad, attr: 'cha', ...innStats() });
     }
   }
   for (const x of sp.innateExtra || []) {
