@@ -1282,10 +1282,12 @@ html[data-theme="light"] {
   --glass-line: rgba(20, 30, 50, .09); --glass-line2: rgba(20, 30, 50, .17); --glass-hi: none; --shadow: 0 6px 18px rgba(20, 30, 50, .08);
 }
 html[data-theme="light"], html[data-theme="light"] body { background: #eef1f5; }
-html[data-theme="light"] body {
+/* the fixed backdrop layer behind every page (covers the whole screen, not just the content) */
+html[data-theme="light"] body::before {
   background:
     radial-gradient(1100px 620px at 8% -12%, rgba(79, 184, 232, .14), transparent 62%),
     radial-gradient(900px 520px at 100% 0%, rgba(137, 96, 255, .07), transparent 60%),
+    radial-gradient(900px 700px at 60% 115%, rgba(63, 191, 127, .05), transparent 60%),
     #eef1f5; }
 html[data-theme="light"] .topbar { background: rgba(255, 255, 255, .88); border-bottom-color: var(--line); }
 html[data-theme="light"] .nav a:hover { background: var(--panel2); }
