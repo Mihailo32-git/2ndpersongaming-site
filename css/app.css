@@ -1432,3 +1432,10 @@ html[data-theme="light"] .badge.rune-badge { color: #6d28d9; background: rgba(12
 .act-mods { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
 .act-mods .chip-btn { min-height: 36px; text-decoration: none; }
 .act-extras h4 + .act-mods, .act-extras .heal-dcs + p + h4 { margin-top: 12px; }
+/* Favorite actions: a star in the top-right corner of each tile, and a Favorites tab. */
+.act-list .act-row { position: relative; padding-right: 34px; }
+.act-fav { position: absolute; top: 2px; right: 2px; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--muted); font-size: 17px; line-height: 1; cursor: pointer; opacity: .55; }
+.act-fav:hover { opacity: 1; background: rgba(var(--ov), .06); }
+.act-fav.on { color: var(--hero); opacity: 1; }
+.act-fav:disabled { cursor: default; }
+@media (pointer: coarse) { .act-fav { width: 36px; height: 36px; top: 0; right: 0; } }

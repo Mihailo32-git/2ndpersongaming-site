@@ -55,7 +55,7 @@ if (!readOnly && charRec.id && store.conflictFor(charRec.id)) {
 }
 const build = normalizeBuild(charRec.build);
 const state = Object.assign({ hp: null, temp: 0, hero: 1, focus: null, dying: 0, wounded: 0, conditions: [], effects: [], raging: false, shieldRaised: false,
-  used: {}, prep: {}, innateUsed: {}, dailyUsed: {}, notes: '', companions: {}, freqUsed: {}, situational: {}, favEffects: [], alchemy: {}, toggles: {} }, charRec.state || {});
+  used: {}, prep: {}, innateUsed: {}, dailyUsed: {}, notes: '', companions: {}, freqUsed: {}, situational: {}, favEffects: [], favActions: [], alchemy: {}, toggles: {} }, charRec.state || {});
 // Maps saved by older versions of the server can come back as lists ({} became []): turn them back into maps.
 for (const k of ['used', 'prep', 'innateUsed', 'dailyUsed', 'companions', 'freqUsed', 'situational', 'alchemy', 'toggles']) state[k] = asObj(state[k]);
 for (const k of Object.keys(state.prep)) state.prep[k] = asObj(state.prep[k]);
@@ -63,6 +63,7 @@ for (const k of Object.keys(state.used)) state.used[k] = asObj(state.used[k]);
 for (const k of Object.keys(state.companions)) state.companions[k] = asObj(state.companions[k]);
 state.alchemy.prep = asObj(state.alchemy.prep);
 if (!Array.isArray(state.favEffects)) state.favEffects = [];
+if (!Array.isArray(state.favActions)) state.favActions = [];
 if (state.effects.length || state.favEffects.length) await db.load(['spell-effects', 'feat-effects', 'equipment-effects']);
 await loadRunes(db);
 let ch = null;
@@ -355,7 +356,7 @@ function TABS() {
 }
 
 const TAB_RENDER = {};
-const ACT_TABS = [{ id: 'basic', label: 'Basic' }, { id: 'skill', label: 'Skill' }, { id: 'special', label: 'Special' }];
+const ACT_TABS = [{ id: 'fav', label: '★ Favorites' }, { id: 'basic', label: 'Basic' }, { id: 'skill', label: 'Skill' }, { id: 'special', label: 'Special' }];
 const COSTS = [{ id: '1', label: '◆', title: 'One action' }, { id: '2', label: '◆◆', title: 'Two actions' }, { id: '3', label: '◆◆◆', title: 'Three actions' },
   { id: 'reaction', label: '⟲', title: 'Reaction' }, { id: 'free', label: '◇', title: 'Free action' }, { id: 'activity', label: 'Longer', title: 'Activities that take longer' }];
 const MODES = [{ id: 'encounter', label: 'Combat' }, { id: 'exploration', label: 'Exploration' }, { id: 'downtime', label: 'Downtime' }];
@@ -453,7 +454,8 @@ TAB_RENDER.actions = (el) => {
     if (x.src) return `<span class="src">${esc(x.src)}${x.rec.freq ? ' · ' + esc(freqText(x.rec.freq)) : ''}</span>`;
     return '';
   };
-  const row = (x) => `<div class="act-row ${x.cant ? 'cant' : ''}" data-row-show="${esc(refOf(x.rec))}" role="button" tabindex="0">
+  const favBtn = (x) => { const r = refOf(x.rec), on = state.favActions.includes(r); return readOnly && !on ? '' : `<button type="button" class="act-fav ${on ? 'on' : ''}" data-afav="${esc(r)}" aria-pressed="${on}" aria-label="${on ? 'Remove ' + esc(x.rec.name) + ' from favorites' : 'Add ' + esc(x.rec.name) + ' to favorites'}" ${readOnly ? 'disabled' : ''}>${on ? '★' : '☆'}</button>`; };
+  const row = (x) => `<div class="act-row ${x.cant ? 'cant' : ''}" data-row-show="${esc(refOf(x.rec))}" role="button" tabindex="0">${favBtn(x)}
     <span class="glyph" title="${esc(COSTS.find((c) => c.id === costOf(x.rec))?.title || '')}">${actionGlyph(x.rec) || '<span class="muted">—</span>'}</span>
     <span class="name">${esc(x.rec.name)}${x.trainedOnly ? ' <span class="badge">Trained</span>' : ''}${modeOf(x.rec) !== 'encounter' && !/^(Exploration|Downtime) activities$/.test(x.head || '') ? ` <span class="badge mode">${esc(titleCase(modeOf(x.rec)))}</span>` : ''}</span>${right(x)}${usesPips(x.rec)}</div>`;
   // Limited uses: one pip per use; tap to mark one used (tap again when all are used to clear them).
@@ -464,6 +466,10 @@ TAB_RENDER.actions = (el) => {
     return `<button type="button" class="uses ${used >= fr.max ? 'spent' : ''}" data-uses="${esc(rec.slug)}" data-max="${fr.max}" ${readOnly ? 'disabled' : ''} aria-label="${esc(rec.name)}: ${used} of ${fr.max} used (${esc(freqText(fr))})" title="${esc(freqText(fr))}">${Array.from({ length: fr.max }, (_, i) => `<i class="${i < used ? 'on' : ''}"></i>`).join('')}<span>${used >= fr.max ? 'used' : fr.max - used + ' left'}</span></button>`;
   }
   const draw = () => {
+    // Favorites: starred actions from every tab, once each, under their usual headings.
+    const seen = new Set();
+    groups.fav = [];
+    for (const k of ['basic', 'skill', 'special']) for (const x of groups[k]) { const r = refOf(x.rec); if (state.favActions.includes(r) && !seen.has(r)) { seen.add(r); groups.fav.push(x); } }
     const counts = {};
     for (const t of ACT_TABS) counts[t.id] = groups[t.id].filter(pass).length;
     $$('[data-tog]', el).forEach((i) => (i.onchange = () => { state.toggles[i.dataset.tog] = i.type === 'checkbox' ? i.checked : (i.value || null); change(); }));
@@ -471,7 +477,7 @@ TAB_RENDER.actions = (el) => {
     $('[data-usable]', el).hidden = actF.tab !== 'skill';
     const items = groups[actF.tab].filter(pass);
     if (!items.length) {
-      list.innerHTML = `<p class="muted small act-empty">${actF.tab === 'special' && !groups.special.length ? 'No special actions yet — they come from your class, feats, archetypes and ancestry.' : 'Nothing matches these filters.'}</p>`;
+      list.innerHTML = `<p class="muted small act-empty">${actF.tab === 'fav' && !groups.fav.length ? 'No favorites yet. Tap ☆ in the corner of an action to keep it here.' : actF.tab === 'special' && !groups.special.length ? 'No special actions yet — they come from your class, feats, archetypes and ancestry.' : 'Nothing matches these filters.'}</p>`;
       return;
     }
     const heads = [];
@@ -506,6 +512,13 @@ TAB_RENDER.actions = (el) => {
     $$('[data-ureset]', list).forEach((b) => (b.onclick = () => {
       const t = Number(b.dataset.ureset);
       for (const x of limitedList(ch, state)) if (x.tier <= t) delete state.freqUsed[x.slug];
+      saveState(); draw();
+    }));
+    $$('[data-afav]', list).forEach((b) => (b.onclick = (e) => {
+      e.stopPropagation();
+      if (readOnly) return;
+      const r = b.dataset.afav;
+      state.favActions = state.favActions.includes(r) ? state.favActions.filter((x) => x !== r) : [...state.favActions, r];
       saveState(); draw();
     }));
     $$('[data-row-show]', list).forEach((r) => {

@@ -815,7 +815,7 @@ export class Engine {
       if (r.slug) mod.slug = r.slug;
       if (r.predicate && r.predicate.length) {
         if (test(this._subst(r.predicate, ch, inst), opts)) out.push(mod);
-        else notes.push({ ...mod, conditional: true });
+        else notes.push({ ...mod, conditional: true, pred: r.predicate });
       } else out.push(mod);
     }
     return { mods: out, notes };
@@ -1124,7 +1124,10 @@ export class Engine {
       this._weaponCtx = { level: rec.level || 0, dice: rec.damage?.dice || 1, potency, splash: rec.splash || 0 };
       const am = this._mods(ch, ['attack', 'attack-roll', 'strike-attack-roll', rec.slug + '-attack', attr + '-based'], state, wOpts);
       const mods = [...am.mods, ...this._conditionMods(state.conditions || [])('attack', attr)];
-      const notes = am.notes;
+      // A bonus that depends only on the weapon itself (Burn It!: alchemical items that deal fire) either applies or doesn't;
+      // only ones that depend on the situation (the target, a stance…) are shown as situational.
+      const onlyItem = (n) => { const t = (JSON.stringify(n.pred || []).match(/"([^"]+)"/g) || []).map((x) => x.slice(1, -1)).filter((x) => !['or', 'and', 'not', 'nor', 'gte', 'lte', 'gt', 'lt', 'eq'].includes(x)); return t.length > 0 && t.every((x) => /^item:/.test(x)); };
+      const notes = am.notes.filter((n) => !onlyItem(n));
       if (potency) mods.push({ label: item?.potencyLabel || 'Potency rune', value: potency, type: 'item' });
       if (rec.bonusAtk) mods.push({ label: 'Item bonus', value: rec.bonusAtk, type: 'item' }); // alchemical bombs (+1 moderate, +2 greater…)
       const s = stackMods(mods);
@@ -1220,7 +1223,7 @@ export class Engine {
         damage: `${die ? `${dice}${die}${dmgMod ? (dmgMod > 0 ? '+' : '') + dmgMod : ''}` : Math.max(1, dice + dmgMod)} ${dmgType}`.trim()
           + Object.entries(extras).map(([t, v]) => ` + ${v} ${t}`).join('') + runeDice.join(''),
         runes: runeTags, runeNotes, material: item && item.material && item.material.type ? item.material : null,
-        persistent, splash: splashBase ? splashBase + splashBonus : 0, range: rec.range || null, mods: s.used, notes, dmgNotes: dm.notes.filter((n) => !n.category), dmgParts,
+        persistent, splash: splashBase ? splashBase + splashBonus : 0, range: rec.range || null, mods: s.used, notes, dmgNotes: dm.notes.filter((n) => !n.category && !onlyItem(n)), dmgParts,
       };
     });
   }
