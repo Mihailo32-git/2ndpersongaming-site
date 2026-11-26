@@ -33,6 +33,7 @@ export function newBuild() {
     // pick: choose-one focus spells; focusExtra/innateExtra: spells added by hand; innate: archetype innate picks.
     spells: { rep: {}, sig: {}, book: {}, arch: {}, pick: {}, focusExtra: [], innate: {}, innateExtra: [], advDomain: null },
     formulas: [],
+    skillAttrs: {}, // house rules: {medicine: 'int'}
     inventory: [],
     money: 1500,
     details: { deity: '', age: '', notes: '', appearance: '' },
@@ -54,7 +55,7 @@ export function normalizeBuild(b0) {
   for (const k of ['rep', 'sig', 'book', 'arch', 'pick', 'innate']) b.spells[k] = asObj(b.spells[k]);
   for (const a of Object.values(b.spells.arch)) if (a && typeof a === 'object') { if ('rep' in a) a.rep = asObj(a.rep); if ('book' in a) a.book = asObj(a.book); }
   b.details = Object.assign(d.details, asObj(b.details));
-  b.feats = asObj(b.feats); b.choices = asObj(b.choices);
+  b.feats = asObj(b.feats); b.choices = asObj(b.choices); b.skillAttrs = asObj(b.skillAttrs);
   for (const [k, v] of Object.entries(b.choices)) if (Array.isArray(v) && !v.length) b.choices[k] = {}; b.inventory = b.inventory || []; b.formulas = b.formulas || []; b.languages = b.languages || [];
   b.companions = Array.isArray(b.companions) ? b.companions : [];
   return b;
@@ -892,11 +893,14 @@ export class Engine {
     // Skills
     const checkPen = armor && !armorStrOk ? (armor.rec.checkPen || 0) : 0;
     ch.skills = {};
-    for (const [skill, attr] of Object.entries(SKILLS)) {
+    // House rules: a skill can use another attribute when the GM allows it (build.skillAttrs, e.g. {medicine: 'int'}).
+    const altAttr = (ch.build && ch.build.skillAttrs) || {};
+    for (const [skill, defaultAttr] of Object.entries(SKILLS)) {
+      const attr = ATTRS.includes(altAttr[skill]) ? altAttr[skill] : defaultAttr;
       const { mods, notes } = statMods(skill, attr, ['skill-check']);
       if (checkPen && (attr === 'str' || attr === 'dex') && !((armor.rec.traits || []).includes('flexible') && (skill === 'acrobatics' || skill === 'athletics'))) mods.push({ label: 'Armor check penalty', value: checkPen, type: 'untyped' });
       const s = stackMods(mods);
-      ch.skills[skill] = { total: A[attr] + rankBonus(R.skills[skill], L) + s.total, rank: R.skills[skill], attr, mods: s.used, notes, source: ch.skillSources[skill] };
+      ch.skills[skill] = { total: A[attr] + rankBonus(R.skills[skill], L) + s.total, rank: R.skills[skill], attr, defaultAttr, mods: s.used, notes, source: ch.skillSources[skill] };
     }
     ch.lores = {};
     for (const [name, rank] of Object.entries(R.lores)) {

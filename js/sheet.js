@@ -175,20 +175,31 @@ function statInfo(key) {
   if (key === 'perception') return { title: 'Perception', stat: ch.perception, label: `Wis + ${RANKS[ch.perception.rank].toLowerCase()}`, value: base(ch.perception) };
   if (ch.saves[key]) { const s = ch.saves[key]; return { title: titleCase(key), stat: s, label: `${ATTR_NAMES[s.attr]} + ${RANKS[s.rank].toLowerCase()}`, value: base(s) }; }
   const st = ch.skills[key];
-  return { title: titleCase(key), stat: st, label: `${ATTR_NAMES[st.attr]} + ${RANKS[st.rank].toLowerCase()} proficiency`, value: base(st) };
+  return { title: titleCase(key), stat: st, skill: true, label: `${ATTR_NAMES[st.attr]}${st.attr !== st.defaultAttr ? ' (house rule)' : ''} + ${RANKS[st.rank].toLowerCase()} proficiency`, value: base(st) };
 }
 function statModal(key) {
   const m = modal(statInfo(key).title);
   const draw = () => {
-    const { stat, isDC, label, value } = statInfo(key);
+    const { stat, isDC, label, value, skill } = statInfo(key);
     const notes = stat.notes || [];
-    m.body.innerHTML = `<table class="stat-table"><tr><td>${esc(label)}</td><td class="mod">${isDC ? value : signed(value)}</td></tr>
+    const alt = skill && stat.attr !== stat.defaultAttr;
+    // House rule: another attribute for this skill, when the GM allows it.
+    const attrPick = !skill ? '' : readOnly ? (alt ? `<p class="small attr-note">Uses <b>${esc(ATTR_NAMES[stat.attr])}</b> instead of ${esc(ATTR_NAMES[stat.defaultAttr])} (house rule).</p>` : '')
+      : `<div class="attr-pick-wrap"><div class="small"><b>Attribute</b> <span class="muted">normally ${esc(ATTR_NAMES[stat.defaultAttr])}; pick another only if your GM allows it</span></div>
+        <div class="attr-pick" role="radiogroup" aria-label="Attribute for ${esc(titleCase(key))}">${ATTRS.map((a) => `<button type="button" role="radio" aria-checked="${stat.attr === a}" class="chip-btn ${stat.attr === a ? 'on' : ''}" data-attr="${a}" title="${esc(ATTR_NAMES[a])}${a === stat.defaultAttr ? ' (normal)' : ''}">${a.toUpperCase()}${a === stat.defaultAttr ? '<span class="attr-dflt" aria-hidden="true">•</span>' : ''} <span class="muted">${signed(ch.attrs[a])}</span></button>`).join('')}</div></div>`;
+    m.body.innerHTML = `${attrPick}<table class="stat-table"><tr><td>${esc(label)}</td><td class="mod">${isDC ? value : signed(value)}</td></tr>
       ${(stat.mods || []).map((x) => `<tr class="${x.situational ? 'sit-mod' : ''}"><td>${esc(x.label)} <span class="muted small">${esc(x.type)}${x.situational ? ' · situational, on' : ''}</span></td><td class="mod">${signed(x.value)}</td></tr>`).join('')}
       <tr><th>Total</th><th class="mod">${isDC ? stat.total : signed(stat.total)}</th></tr></table>
       ${notes.length ? `<h4 style="margin-top:14px">Situational</h4>
         <p class="muted small" style="margin-top:0">${readOnly ? 'Ticked ones are on.' : 'Tick one while it applies: it counts until you untick it.'}</p>
         <div class="sit-list">${notes.map((n) => `<label class="sit-row ${n.on ? 'on' : ''}"><input type="checkbox" data-sit="${esc(n.id)}" ${n.on ? 'checked' : ''} ${readOnly ? 'disabled' : ''}>
           <span><b class="mono">${signed(n.value)}</b> ${esc(n.type)} <span class="muted">from</span> ${esc(n.label)}${n.source && n.source !== n.label ? ` <span class="muted small">(${esc(n.source)})</span>` : ''}</span></label>`).join('')}</div>` : ''}`;
+    $$('[data-attr]', m.body).forEach((b) => (b.onclick = () => {
+      const a = b.dataset.attr;
+      build.skillAttrs = Object.assign({}, build.skillAttrs);
+      if (a === stat.defaultAttr) delete build.skillAttrs[key]; else build.skillAttrs[key] = a;
+      saveBuild(); change(); draw();
+    }));
     $$('[data-sit]', m.body).forEach((c) => (c.onchange = () => {
       const on = new Set(state.situational[key] || []);
       if (c.checked) on.add(c.dataset.sit); else on.delete(c.dataset.sit);
@@ -307,7 +318,7 @@ function render() {
 
     <aside class="col-right card tight" style="margin:0">
       <h2 class="label" style="margin-bottom:6px">Skills</h2>
-      ${Object.keys(SKILLS).map((s) => { const k = ch.skills[s]; return `<div class="skill-row ${k.rank ? '' : 'untrained'}" data-skill="${s}" role="button" tabindex="0">${rankBadge(k.rank)}<span class="sk-name">${esc(titleCase(s))}${sitOn(k) ? ' <span class="sit-mark" title="A situational bonus is on">✓</span>' : k.notes.length ? ' <span class="warn" title="Has situational modifiers: tap to tick one on">*</span>' : ''}</span><span class="sk-mod ${sitOn(k) ? 'sit-on' : ''}">${signed(k.total)}</span></div>`; }).join('')}
+      ${Object.keys(SKILLS).map((s) => { const k = ch.skills[s]; return `<div class="skill-row ${k.rank ? '' : 'untrained'}" data-skill="${s}" role="button" tabindex="0">${rankBadge(k.rank)}<span class="sk-name">${esc(titleCase(s))}${k.attr !== k.defaultAttr ? ` <span class="attr-tag" title="Uses ${esc(ATTR_NAMES[k.attr])} (house rule)">${k.attr.toUpperCase()}</span>` : ''}${sitOn(k) ? ' <span class="sit-mark" title="A situational bonus is on">✓</span>' : k.notes.length ? ' <span class="warn" title="Has situational modifiers: tap to tick one on">*</span>' : ''}</span><span class="sk-mod ${sitOn(k) ? 'sit-on' : ''}">${signed(k.total)}</span></div>`; }).join('')}
       ${Object.entries(ch.lores).map(([n, l]) => `<div class="skill-row">${rankBadge(l.rank)}<span class="sk-name">${esc(/lore$/i.test(n) ? n : n + ' Lore')}</span><span class="sk-mod">${signed(l.total)}</span></div>`).join('')}
       <h2 class="label" style="margin:14px 0 6px">Proficiencies</h2>
       <table class="stat-table small">
