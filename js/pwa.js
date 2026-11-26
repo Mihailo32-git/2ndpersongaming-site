@@ -37,6 +37,8 @@ if (sw && location.protocol !== 'file:') {
       reg = await sw.register('sw.js');
       const watch = (w) => w && w.addEventListener('statechange', () => { if (w.state === 'installed' && sw.controller) updateBanner(w); });
       if (reg.waiting && sw.controller) updateBanner(reg.waiting);
+      // A new version may already be downloading (started before a reload): it fires no "updatefound" now.
+      watch(reg.installing);
       reg.addEventListener('updatefound', () => watch(reg.installing));
       // Look for a new version now and then (tablets can stay open for a whole session).
       setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
@@ -48,6 +50,34 @@ if (sw && location.protocol !== 'file:') {
       notify();
     } catch (e) { /* the site still works online without it */ }
   });
+}
+
+/**
+ * Looks for a new version right now ("Check for updates"). onStage('downloading') is called while it downloads.
+ * Resolves to 'ready' (a new version is waiting: applyUpdate() switches to it), 'none', 'failed' or 'unsupported'.
+ */
+export async function checkForUpdate(onStage) {
+  const r = reg || (sw && location.protocol !== 'file:' ? await sw.getRegistration().catch(() => null) : null);
+  if (!r) return 'unsupported';
+  if (r.waiting && sw.controller) return 'ready';
+  try { await r.update(); } catch (e) { return 'failed'; }
+  const w = r.installing || r.waiting;
+  if (!w || !sw.controller) return 'none';
+  if (w.state === 'installed') return 'ready';
+  if (onStage) onStage('downloading');
+  return new Promise((resolve) => {
+    const done = (v) => { w.removeEventListener('statechange', on); resolve(v); };
+    const on = () => { if (w.state === 'installed') done('ready'); else if (w.state === 'redundant') done('failed'); else if (w.state === 'activated') done('none'); };
+    w.addEventListener('statechange', on);
+    on();
+  });
+}
+/** Switches to the downloaded version; the page reloads by itself once it takes over. */
+export function applyUpdate() {
+  const w = reg && reg.waiting;
+  if (!w) return false;
+  w.postMessage({ type: 'skip-waiting' });
+  return true;
 }
 
 function ask(type, onMsg, extra) {
@@ -83,7 +113,22 @@ export async function openAppPanel() {
       ${ready && st.creaturesTotal ? `<div class="app-row"><div><b>Bestiary offline</b> <span class="muted small">(for GMs)</span><p class="muted small">Every creature statblock for the GM screen. ${allCr ? 'All of it is saved on this device.' : `${st.creatures} of ${st.creaturesTotal} parts saved; creatures you open online are kept too.`}</p>
         <div class="app-progress" hidden><div></div></div></div>
         ${allCr ? '<span class="badge ok-badge">Saved</span>' : `<button type="button" class="btn" data-dl="creatures" ${navigator.onLine ? '' : 'disabled'}>Download (~${mb(st.sizes?.creatures)} MB)</button>`}</div>` : ''}
-      <p class="muted small" style="margin-top:12px">Version ${esc(st?.version || '–')}</p>`;
+      <div class="app-row"><div><b>Updates</b><p class="muted small" id="updMsg">Version ${esc(st?.version || '–')}. New versions are picked up by themselves; check here if one hasn’t shown up.</p></div>
+        <button type="button" class="btn" id="updCheck" ${navigator.onLine ? '' : 'disabled'}>Check for updates</button></div>`;
+    const upd = m.body.querySelector('#updCheck');
+    const updMsg = m.body.querySelector('#updMsg');
+    upd.onclick = async () => {
+      if (upd.dataset.ready) { upd.disabled = true; upd.textContent = 'Updating…'; if (!applyUpdate()) location.reload(); return; }
+      upd.disabled = true; upd.textContent = 'Checking…';
+      const res = await checkForUpdate(() => { upd.textContent = 'Downloading…'; updMsg.textContent = 'Found a new version, downloading it…'; });
+      upd.disabled = false;
+      if (res === 'ready') {
+        upd.dataset.ready = '1'; upd.textContent = 'Update now'; upd.classList.add('primary');
+        updMsg.textContent = 'A new version is ready. Updating reloads the page; your characters are kept.';
+      } else if (res === 'none') { upd.textContent = 'Check again'; updMsg.textContent = `You have the latest version (${st?.version || '–'}).`; }
+      else if (res === 'unsupported') { upd.textContent = 'Reload'; upd.dataset.ready = '1'; updMsg.textContent = 'This browser keeps no offline copy, so reloading the page always gets the newest version.'; }
+      else { upd.textContent = 'Try again'; updMsg.textContent = navigator.onLine ? 'Couldn’t get the new version yet (it may still be going up). Try again in a minute.' : 'You’re offline. Connect to the internet and try again.'; }
+    };
     const inst = m.body.querySelector('#appInstall');
     if (inst) inst.onclick = async () => { const e = installEvent; installEvent = null; e.prompt(); await e.userChoice.catch(() => null); draw(); notify(); };
     m.body.querySelectorAll('[data-dl]').forEach((dl) => (dl.onclick = async () => {
