@@ -113,11 +113,11 @@ export function headerLine(rec) {
 }
 
 /** Shows the rules text of a reference, with clickable links to other entries. */
-export async function showRef(db, ref, { stack = null, extraHtml = '' } = {}) {
+export async function showRef(db, ref, { stack = null, extraHtml = '', afterHtml = '' } = {}) {
   const rec = db.get(ref);
   if (!rec) {
     const [pack] = refParts(ref);
-    if (pack && !db.has(pack)) { await db.load([pack]); return showRef(db, ref, { stack, extraHtml }); }
+    if (pack && !db.has(pack)) { await db.load([pack]); return showRef(db, ref, { stack, extraHtml, afterHtml }); }
     toast('Not found: ' + ref, 'error');
     return;
   }
@@ -125,7 +125,7 @@ export async function showRef(db, ref, { stack = null, extraHtml = '' } = {}) {
   m.history = m.history || [];
   m.setTitle(rec.name);
   m.body.innerHTML = `<div class="ref-view"><div class="ref-head"><span class="glyph">${actionGlyph(rec)}</span><span class="kind">${esc(headerLine(rec))}</span></div>
-    ${traitChips(rec.traits, rec.rarity)}<div class="meta">${metaLines(rec)}</div>${extraHtml}<div class="rules-text"><p class="muted">Loading…</p></div>
+    ${traitChips(rec.traits, rec.rarity)}<div class="meta">${metaLines(rec)}</div>${extraHtml}<div class="rules-text"><p class="muted">Loading…</p></div>${afterHtml}
     <div class="source">${esc(rec.src || '')}${rec.lic ? ' · ' + esc(rec.lic) : ''}</div></div>`;
   const html = await db.text(ref);
   m.body.querySelector('.rules-text').innerHTML = html || '<p class="muted">No description.</p>';

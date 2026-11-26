@@ -1423,3 +1423,12 @@ html[data-theme="light"] .badge.rune-badge { color: #6d28d9; background: rgba(12
 .rune-row.off { opacity: .55; }
 .rune-mat select { min-height: 40px; }
 .dr-sub label.check { gap: 6px; align-items: center; margin-left: 4px; } .dr-sub label.check input { width: 18px; height: 18px; accent-color: var(--accent); }
+/* Under an action: DC table (Treat Wounds, Battle Medicine) and the feats and items that change it. */
+.act-extras { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.act-x-h { margin: 0 0 8px; font-size: 13px; }
+.act-x-h .muted { font-weight: 500; margin-left: 6px; }
+.heal-dcs th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; }
+.heal-dcs tr.out td { color: var(--muted); opacity: .6; }
+.act-mods { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.act-mods .chip-btn { min-height: 36px; text-decoration: none; }
+.act-extras h4 + .act-mods, .act-extras .heal-dcs + p + h4 { margin-top: 12px; }

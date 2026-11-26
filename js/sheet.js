@@ -395,6 +395,27 @@ function actionGroups() {
   return { basic, skill, special };
 }
 
+// Under an action's rules text: the Medicine DC table for Treat Wounds and Battle Medicine, and this character's feats,
+// features and items whose rules change the action (their text links to it: Mortal Healing → Treat Wounds).
+const HEAL_DCS = [[15, 1, 0], [20, 2, 10], [30, 3, 30], [40, 4, 50]];
+function actionExtras(ref) {
+  let html = '';
+  if (ref === '@actions/treat-wounds' || ref === '@feats/battle-medicine') {
+    const rank = ch.ranks.skills.medicine || 0;
+    html += `<h4 class="act-x-h">Medicine DCs <span class="muted small">your Medicine ${signed(ch.skills.medicine.total)} (${esc(RANKS[rank].toLowerCase())})</span></h4>
+      <table class="stat-table heal-dcs"><tr><th>DC</th><th>Needs</th><th>Success</th><th>Critical success</th></tr>
+      ${HEAL_DCS.map(([dc, need, add]) => `<tr class="${rank >= need ? '' : 'out'}"><td class="mono">${dc}</td><td>${esc(RANKS[need].toLowerCase())}</td><td class="mono">2d8${add ? '+' + add : ''}</td><td class="mono">4d8${add ? '+' + add : ''}</td></tr>`).join('')}</table>
+      <p class="small muted">${ref === '@actions/treat-wounds' ? 'Hit Points regained. Keep treating for a full hour to double them. ' : 'Hit Points restored. '}Critical failure: the target takes 1d8 damage.</p>`;
+  }
+  const own = new Map();
+  for (const i of ch.items || []) if (i.rec && (i.rec.acts || []).includes(ref)) own.set(refOf(i.rec), i.rec);
+  for (const it of ch.inventory || []) if ((it.equipped || it.invested) && it.rec && (it.rec.acts || []).includes(ref)) own.set(it.ref, it.rec);
+  own.delete(ref);
+  if (own.size) html += `<h4 class="act-x-h">Your feats and items that mention it</h4>
+    <div class="act-mods">${[...own].map(([r, rec]) => `<a class="ref chip-btn" data-ref="${esc(r.slice(1))}">${esc(rec.name)}</a>`).join('')}</div>`;
+  return html ? `<div class="act-extras">${html}</div>` : '';
+}
+
 TAB_RENDER.actions = (el) => {
   el.innerHTML = `<h3 class="sub-head">Strikes</h3>${(ch.toggles || []).length ? `<div class="strike-toggles" role="group" aria-label="Strike options">${ch.toggles.map((t) => (t.subs.length
     ? `<label class="st-tog ${t.on ? 'on' : ''}" title="${esc(t.source)}"><span>${t.option === 'bomber-field-vials' ? 'Vial damage' : esc(t.label)}</span><select data-tog="${esc(t.option)}" ${readOnly ? 'disabled' : ''}><option value="">${t.option === 'bomber-field-vials' ? 'Acid (normal)' : 'Off'}</option>${t.subs.map((x) => `<option value="${esc(x.value)}" ${t.on === x.value ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></label>`
@@ -488,7 +509,7 @@ TAB_RENDER.actions = (el) => {
       saveState(); draw();
     }));
     $$('[data-row-show]', list).forEach((r) => {
-      const open = () => showRef(db, r.dataset.rowShow);
+      const open = () => showRef(db, r.dataset.rowShow, { afterHtml: actionExtras(r.dataset.rowShow) });
       r.onclick = open;
       r.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
     });
@@ -1160,7 +1181,7 @@ function wire() {
     row.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
   });
   $$('[data-cond]', main).forEach((b) => (b.onclick = () => openCondition(Number(b.dataset.cond))));
-  $$('.act-row[data-row-show]', main).forEach((r) => (r.onclick = (e) => { if (!e.target.closest('[data-show]')) showRef(db, r.dataset.rowShow); }));
+  $$('.act-row[data-row-show]', main).forEach((r) => (r.onclick = (e) => { if (!e.target.closest('[data-show]')) showRef(db, r.dataset.rowShow, { afterHtml: actionExtras(r.dataset.rowShow) }); }));
   const invPanel = $('#tabPanel'); if (invPanel && (tab === 'equipment' || tab === 'inventory')) wireInv(invPanel);
   if (readOnly) { $$('.no-print', main).forEach((b) => b.remove()); $$('.pip', main).forEach((b) => (b.disabled = true)); return; }
   const amt = () => Math.max(0, Number($('#hpAmt').value) || 0);
