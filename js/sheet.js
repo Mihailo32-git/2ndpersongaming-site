@@ -13,6 +13,7 @@ import { openSpellPicker, rarityBadge } from './pickers.js';
 import { openDrawer } from './drawer.js';
 import { renderCompanions } from './companion-ui.js';
 import { parseFreq, freqText, limitedList, RESET_TIERS } from './uses.js';
+import { portraitSrc, pickImage, makePortrait } from './portrait.js';
 
 // Wrapped in an async function instead of top-level await so older tablet browsers (Chrome 80+) can run it.
 (async () => {
@@ -143,6 +144,21 @@ function compute() {
   if (state.focus === null || state.focus > fmax) state.focus = fmax;
   if (state.hp === null || state.hp > ch.hp.max) state.hp = ch.hp.max;
 }
+// Portrait: picked from the device, shrunk to a small picture and kept in the build.
+async function choosePortrait(after) {
+  const f = await pickImage();
+  if (!f) return;
+  try { build.portrait = await makePortrait(f); } catch (e) { toast(e.message, 'error'); return; }
+  saveBuild(); render(); after && after();
+}
+function portraitModal() {
+  const m = modal(build.name || 'Portrait');
+  m.body.innerHTML = `<div class="portrait-big"><img src="${portraitSrc(build.portrait)}" alt="Portrait of ${esc(build.name || 'this character')}"></div>
+    ${readOnly ? '' : `<div class="row end" style="margin-top:12px;gap:8px"><button type="button" class="btn danger" data-prm>Remove</button><button type="button" class="btn primary" data-pchg>Change picture</button></div>`}`;
+  if (readOnly) return;
+  $('[data-pchg]', m.body).onclick = () => choosePortrait(() => m.close());
+  $('[data-prm]', m.body).onclick = async () => { if (!(await confirmBox('Remove this portrait?'))) return; delete build.portrait; saveBuild(); render(); m.close(); };
+}
 function change(rerender = true) { compute(); saveState(); if (rerender) render(); }
 
 // ------------------------------------------------------------------ rendering helpers
@@ -215,16 +231,21 @@ function render() {
   const isBarb = ch.class?.slug === 'barbarian' || ch.ownedSlugs.has('rage');
   const sub = ch.items.filter((i) => i.pack === 'classfeatures' && i.key.split('>').length === 2 && i.key.startsWith('cf:')).map((i) => i.rec.name).slice(0, 2);
   const identity = [`${ch.ancestry?.name || ''}${ch.heritage ? ' (' + ch.heritage.name.replace(new RegExp('\\s*' + (ch.ancestry?.name || '###') + '$'), '') + ')' : ''}`, `${ch.class?.name || 'No class'} ${L}`, ch.background?.name, sub.join(' / '), ch.deity?.name].filter(Boolean).join(' · ');
-  main.innerHTML = `
-  <section class="hero-card">
-    <div class="hero-left">
-    <div class="hero-top"><div class="avatar" aria-hidden="true">${esc(initials(build.name))}</div>
-    <div class="hero-id"><h1>${esc(build.name || 'Unnamed')}</h1><div class="identity">${esc(identity)}</div></div></div>
-      <div class="row no-print hero-btns">
+  const pic = portraitSrc(build.portrait);
+  const heroBtns = `<div class="row no-print hero-btns">
         <button type="button" class="btn small" id="restBtn" title="Daily preparations: restore HP, slots and focus">☾ Rest</button>
         ${isBarb ? `<button type="button" class="btn small ${state.raging ? 'primary' : ''}" id="rageBtn" aria-pressed="${state.raging}">${state.raging ? 'Raging' : 'Rage'}</button>` : ''}
         ${ch.shield ? `<button type="button" class="btn small ${state.shieldRaised ? 'primary' : ''}" id="shieldBtn" aria-pressed="${state.shieldRaised}">${state.shieldRaised ? 'Shield raised' : 'Raise shield'}</button>` : ''}
-      </div>
+      </div>`;
+  main.innerHTML = `
+  <section class="hero-card">
+    <div class="hero-left">
+    <div class="hero-top ${pic ? 'has-pic' : ''}">${pic
+      ? `<button type="button" class="portrait" id="portraitBtn" aria-label="${readOnly ? 'Show portrait' : 'Portrait: change or remove'}"><img src="${pic}" alt=""></button>`
+      : readOnly ? `<div class="avatar" aria-hidden="true">${esc(initials(build.name))}</div>`
+        : `<button type="button" class="avatar add-pic" id="portraitBtn" title="Add a portrait" aria-label="Add a portrait">${esc(initials(build.name))}<span class="pic-plus" aria-hidden="true">+</span></button>`}
+    <div class="hero-id"><h1>${esc(build.name || 'Unnamed')}</h1><div class="identity">${esc(identity)}</div>${pic ? heroBtns : ''}</div></div>
+      ${pic ? '' : heroBtns}
       <div class="tiles checks" aria-label="Perception and DCs">
         ${tile('perception', 'Perception', signed(ch.perception.total), ch.perception.rank)}
         ${ch.classDC ? tile('classdc', 'Class DC', ch.classDC.total, ch.classDC.rank) : ''}
@@ -971,6 +992,8 @@ function wire() {
   };
   const sh = $('#shieldBtn');
   if (sh) sh.onclick = () => { state.shieldRaised = !state.shieldRaised; change(); };
+  const pBtn = $('#portraitBtn');
+  if (pBtn) pBtn.onclick = () => (portraitSrc(build.portrait) ? portraitModal() : choosePortrait());
   $('#restBtn').onclick = () => {
     state.hp = ch.hp.max; state.temp = 0; state.focus = ch.spellcasting.focus.max || ch.focusMax; state.used = {}; state.innateUsed = {}; state.dailyUsed = {}; state.raging = false; state.shieldRaised = false;
     // Limited uses come back too, except weekly (and longer) ones.

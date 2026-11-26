@@ -9,6 +9,7 @@ import { slotRows, ordinal } from './casting.js';
 import { openCreatureEditor, blankCreature } from './creature-editor.js';
 import { loadCompanionData, companionSummary } from './companion-ui.js';
 import { limitedList, innateList, innateGroups, dailyList, consumables, freqText } from './uses.js';
+import { portraitSrc } from './portrait.js';
 
 (async () => {
 const $ = (s, r = document) => r.querySelector(s);
@@ -389,7 +390,7 @@ function partyHtml() {
     const h = hpOf(p); const ch = p.ch;
     const cls = ch.class?.name || ''; const fmax = ch.spellcasting.focus?.max || ch.focusMax || 0;
     return `<button type="button" class="gm-pc" data-pc="${i}">
-      <div class="gm-pc-top"><span class="gm-av">${esc((p.build.name || '?').replace(/[^\p{L}\s]/gu, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase())}</span>
+      <div class="gm-pc-top">${portraitSrc(p.build.portrait) ? `<img class="gm-av gm-pic" src="${portraitSrc(p.build.portrait)}" alt="">` : `<span class="gm-av">${esc((p.build.name || '?').replace(/[^\p{L}\s]/gu, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase())}</span>`}
         <span class="gm-pc-id"><b>${esc(p.build.name || 'Unnamed')}</b><span class="muted">${esc(cls)} ${p.build.level}${p.player ? ' · ' + esc(p.player) : ''}</span></span>
         <span class="gm-ac" title="Armor Class">${ch.ac.total}</span></div>
       <div class="gm-hp-line"><span class="mono"><b>${h.cur}</b>/${h.max}${h.temp ? ` <span class="gm-temp">+${h.temp}</span>` : ''}</span>${p.state.dying ? `<span class="gm-cond bad">Dying ${p.state.dying}</span>` : ''}</div>
@@ -413,7 +414,7 @@ function openPc(p) {
   const fmax = ch.spellcasting.focus?.max || ch.focusMax || 0;
   const daily = dailyList(ch, p.state), lim = limitedList(ch, p.state), cons = consumables(ch);
   m.body.innerHTML = `
-    <p class="muted" style="margin-top:0">${esc([p.ch.ancestry?.name, p.ch.class?.name, 'level ' + p.build.level].filter(Boolean).join(' · '))}</p>
+    <div class="gm-pc-who">${portraitSrc(p.build.portrait) ? `<img class="gm-pc-pic" src="${portraitSrc(p.build.portrait)}" alt="">` : ''}<p class="muted" style="margin:0">${esc([p.ch.ancestry?.name, p.ch.class?.name, 'level ' + p.build.level].filter(Boolean).join(' · '))}</p></div>
     <div class="gm-card-grid">
       <div><h3 class="inv-h">Hit Points</h3><div class="gm-big"><b>${h.cur}</b><span>/ ${h.max}</span>${h.temp ? `<span class="gm-temp">+${h.temp} temp</span>` : ''}</div>${bar(h.cur, h.max, h.temp)}
         <p class="small">${p.state.dying ? `<span class="bad">Dying ${p.state.dying}</span> · ` : ''}Wounded ${p.state.wounded || 0}</p>
