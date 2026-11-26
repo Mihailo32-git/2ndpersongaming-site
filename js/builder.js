@@ -930,7 +930,8 @@ RENDER.details = (root) => {
       <label class="check"><input type="checkbox" id="optAP" ${build.options.ancestryParagon ? 'checked' : ''}><span><b>Ancestry paragon</b><br><span class="muted small">Two ancestry feats at 1st level, then one at every odd level (11 in total).</span></span></label>
       <label class="check"><input type="checkbox" id="optAlt2" ${build.options.altAncestryBoosts ? 'checked' : ''}><span><b>Alternate ancestry boosts</b><br><span class="muted small">Two free boosts instead of your ancestry's usual boosts and flaw.</span></span></label>
       <label class="check"><input type="checkbox" id="optRare" ${build.options.showRare ? 'checked' : ''}><span><b>Show uncommon and rare options</b><br><span class="muted small">Ask your GM before taking them.</span></span></label>
-      <label class="check"><input type="checkbox" id="optPre" ${build.options.ignorePrereqs ? 'checked' : ''}><span><b>Allow feats without meeting prerequisites</b><br><span class="muted small">For GM-approved exceptions.</span></span></label></div>`)}
+      <label class="check"><input type="checkbox" id="optPre" ${build.options.ignorePrereqs ? 'checked' : ''}><span><b>Allow feats without meeting prerequisites</b><br><span class="muted small">For GM-approved exceptions.</span></span></label>
+      ${ch.ownedSlugs?.has('sticky-bomb') ? `<label class="check"><input type="checkbox" id="optSticky" ${build.options.legacyStickyBomb !== false ? 'checked' : ''}><span><b>Pre-remaster Sticky Bomb</b><br><span class="muted small">On by default. Persistent damage equals the splash the bomb actually deals (with Field Discovery and Expanded Splash). Untick for the remaster rule: the splash in the bomb's stat block.</span></span></label>` : ''}</div>`)}
     ${group('Still to do', w.length ? `<ul class="small" style="margin:4px 12px 10px;padding-left:16px">${[...new Set(w)].map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="empty-note ok">✓ Everything is filled in.</p>')}
     ${group('Export', `<div class="pad"><p class="small muted" style="margin-top:0">Download this character as a file you can import again later or send to your GM.</p><button type="button" class="btn" id="exportBtn">Download JSON</button></div>`)}
   </div>`);
@@ -945,6 +946,7 @@ RENDER.details = (root) => {
   bind('#optAlt2', (t) => (build.options.altAncestryBoosts = t.checked));
   bind('#optRare', (t) => (build.options.showRare = t.checked));
   bind('#optPre', (t) => (build.options.ignorePrereqs = t.checked));
+  if ($('#optSticky')) bind('#optSticky', (t) => (build.options.legacyStickyBomb = t.checked));
   $('#exportBtn').onclick = () => {
     const blob = new Blob([JSON.stringify({ format: 'pf2e-builder', version: 1, name: build.name, build, state: charRec.state || {} }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');

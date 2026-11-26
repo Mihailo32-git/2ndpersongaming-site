@@ -23,7 +23,7 @@ export function newBuild() {
   return {
     v: 1, name: '', player: '', level: 1,
     ancestry: null, heritage: null, background: null, class: null,
-    options: { freeArchetype: false, ancestryParagon: false, ignorePrereqs: false, altAncestryBoosts: false, gradualBoosts: false, showRare: true },
+    options: { freeArchetype: false, ancestryParagon: false, ignorePrereqs: false, altAncestryBoosts: false, gradualBoosts: false, showRare: true, legacyStickyBomb: true },
     boosts: { ancestry: [], ancestryAlt: [], background: [], class: null, 1: [], 5: [], 10: [], 15: [], 20: [] },
     skills: { class: [], int: {}, inc: {} },
     languages: [],
@@ -793,6 +793,7 @@ export class Engine {
       const mod = { label: r.label || inst.rec.name, value, type: r.type || 'untyped', source: inst.rec.name };
       if (r.damageType && typeof r.damageType === 'string' && !r.damageType.includes('{')) mod.damageType = r.damageType;
       if (r.damageCategory) mod.category = r.damageCategory;
+      if (r.slug) mod.slug = r.slug;
       if (r.predicate && r.predicate.length) {
         if (test(this._subst(r.predicate, ch, inst), opts)) out.push(mod);
         else notes.push({ ...mod, conditional: true });
@@ -1144,7 +1145,11 @@ export class Engine {
       const pType = (per && per.n && per.type) || dmgType;
       // Typed bonuses (Burn It!: +1 persistent fire) only add to persistent damage the bomb already deals;
       // untyped ones (Sticky Bomb: persistent equal to the splash) take the bomb's damage type.
-      const pMods = dm.mods.filter((m) => m.category === 'persistent' && (m.damageType ? m.damageType === pType : true));
+      // Pre-remaster Sticky Bomb (table option, on by default): persistent damage equal to the splash actually dealt, not the listed splash.
+      const finalSplash = splashBase ? splashBase + splashBonus : 0;
+      const legacySticky = ch.build?.options?.legacyStickyBomb !== false; // on unless turned off
+      const pMods = dm.mods.filter((m) => m.category === 'persistent' && (m.damageType ? m.damageType === pType : true))
+        .map((m) => (legacySticky && m.slug === 'sticky-bomb' ? { ...m, value: finalSplash } : m));
       const pb = stackMods(pMods).total;
       if (per && per.n) {
         const base = per.faces ? `${per.n}d${per.faces}${pb ? (pb > 0 ? '+' : '') + pb : ''}` : String(per.n + pb);
