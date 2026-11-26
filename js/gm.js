@@ -11,6 +11,7 @@ import { loadCompanionData, companionSummary } from './companion-ui.js';
 import { limitedList, innateList, innateGroups, dailyList, consumables, freqText, alchemyInfo } from './uses.js';
 import { portraitSrc } from './portrait.js';
 import { loadRunes } from './runes.js';
+import { openCheatSheet } from './gm-cheat.js';
 
 (async () => {
 const $ = (s, r = document) => r.querySelector(s);
@@ -763,6 +764,7 @@ function encounterHtml() {
     <div class="gm-enc-top">
       <input type="text" class="gm-enc-name" value="${esc(enc.name)}" aria-label="Encounter name" maxlength="120">
       <button type="button" class="btn small ghost" id="encList">Encounters ▾</button>
+      <button type="button" class="btn small ghost" id="cheatBtn" title="DCs, conditions, dying, cover, encounter budget…">📖 Cheat sheet</button>
     </div>
     <div class="gm-enc-head">
       <span class="gm-sync ${syncState}"></span>
@@ -1167,6 +1169,7 @@ function wireEnc() {
   name.onchange = () => { enc.name = name.value.trim() || 'Encounter'; save(); };
   name.onkeydown = (e) => { if (e.key === 'Enter') name.blur(); };
   $('#encList').onclick = openEncounters;
+  $('#cheatBtn').onclick = () => openCheatSheet({ db, partyLevel: partyLevel(), threats: THREATS, xpByDiff: XP_BY_DIFF });
   $$('[data-pl]').forEach((b) => (b.onclick = () => { enc.partyLevel = Math.max(-1, Math.min(25, partyLevel() + Number(b.dataset.pl))); save(); render(); }));
   $$('[data-ps]').forEach((b) => (b.onclick = () => { enc.partySize = Math.max(1, Math.min(10, partySize() + Number(b.dataset.ps))); save(); render(); }));
   $('#addCr').onclick = openBestiary;

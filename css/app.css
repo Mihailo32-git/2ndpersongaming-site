@@ -1439,3 +1439,28 @@ html[data-theme="light"] .badge.rune-badge { color: #6d28d9; background: rgba(12
 .act-fav.on { color: var(--hero); opacity: 1; }
 .act-fav:disabled { cursor: default; }
 @media (pointer: coarse) { .act-fav { width: 36px; height: 36px; top: 0; right: 0; } }
+
+/* ============================================================ GM cheat sheet (side panel) */
+.cs-jumps { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; position: sticky; top: -14px; z-index: 1; padding: 8px 0; background: var(--panel); }
+.cs-jumps .chip-btn { min-height: 34px; }
+.cs-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@media (min-width: 900px) { .cs-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cs-sec#cs-dc, .cs-sec#cs-cond { grid-column: 1 / -1; } }
+.cs-sec { padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: rgba(var(--ov), .02); scroll-margin-top: 60px; }
+.cs-sec h3 { margin: 0 0 8px; font-size: 14px; color: var(--accent); }
+.cs-sub { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.cs-sub b { color: var(--ink); }
+.cs-list { margin: 0; padding-left: 18px; font-size: 13.5px; line-height: 1.5; }
+.cs-list li + li { margin-top: 4px; }
+.cs-dcs { display: grid; grid-template-columns: repeat(13, minmax(0, 1fr)); gap: 4px; }
+@media (max-width: 700px) { .cs-dcs { grid-template-columns: repeat(7, minmax(0, 1fr)); } }
+.cs-dc { display: flex; flex-direction: column; align-items: center; padding: 4px 0; border: 1px solid var(--line); border-radius: 8px; font-size: 11px; color: var(--muted); }
+.cs-dc b { font-size: 15px; color: var(--ink); font-family: var(--mono, monospace); }
+.cs-dc.on { border-color: var(--accent); background: var(--accent-soft); }
+.cs-dc.on b { color: var(--accent); }
+.cs-conds { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 6px 14px; }
+.cs-cond { font-size: 13px; line-height: 1.4; }
+.cs-cond .linkish { font-weight: 700; margin-right: 6px; text-decoration: none; }
+.cs-cond span { color: var(--muted); }
+.cs-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.cs-table th, .cs-table td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--line3, var(--line)); }
+.cs-table tr:first-child th, .cs-table tr:first-child td { color: var(--muted); font-size: 12px; font-weight: 600; }
