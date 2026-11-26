@@ -8,6 +8,7 @@ import { signed, titleCase, uid } from './util.js';
 import { slotRows, ordinal } from './casting.js';
 import { openCreatureEditor, blankCreature } from './creature-editor.js';
 import { loadCompanionData, companionSummary } from './companion-ui.js';
+import { limitedList, innateList, dailyList, consumables, freqText } from './uses.js';
 
 (async () => {
 const $ = (s, r = document) => r.querySelector(s);
@@ -368,6 +369,19 @@ const compLines = (p) => {
   if (!compData) { loadCompanionData(db).then((d) => { compData = d; renderParty(); }); return []; }
   return companionSummary(p.build, p.state, p.ch, compData);
 };
+// What a player has left of their limited things, in one short line on their card.
+function spentLine(p) {
+  const st = p.state || {};
+  const parts = [];
+  const inn = innateList(p.ch, st);
+  if (inn.length) parts.push(`<span title="Innate spells left today">✧ ${inn.filter((x) => !x.used).length}/${inn.length}</span>`);
+  for (const d of dailyList(p.ch, st)) parts.push(`<span title="${esc(d.label)}">⚗ ${d.left}/${d.max}</span>`);
+  const lim = limitedList(p.ch, st);
+  if (lim.length) { const left = lim.reduce((a, x) => a + x.max - x.used, 0), tot = lim.reduce((a, x) => a + x.max, 0); parts.push(`<span title="Limited-use abilities left" class="${left < tot ? 'gm-warn' : ''}">⏱ ${left}/${tot}</span>`); }
+  const cons = consumables(p.ch);
+  if (cons.total) parts.push(`<span title="Consumables carried">🧪 ${cons.total}</span>`);
+  return parts.length ? `<div class="gm-res gm-spent">${parts.join('')}</div>` : '';
+}
 function partyHtml() {
   if (!party.length) return store.user && activeParty ? '<p class="muted small">Nobody has joined yet. Share the join code: players tap <b>Party</b> on their sheet and enter it.</p>' : '<p class="muted small">No characters yet.</p>';
   return party.map((p, i) => {
@@ -381,6 +395,7 @@ function partyHtml() {
       ${bar(h.cur, h.max, h.temp)}
       <div class="gm-mini">${['fortitude', 'reflex', 'will'].map((s) => `<span>${s[0].toUpperCase()}<b>${signed(ch.saves[s].total)}</b></span>`).join('')}<span>Per<b>${signed(ch.perception.total)}</b></span></div>
       <div class="gm-res">${p.state.hero ? `<span title="Hero points">★ ${p.state.hero}</span>` : ''}${fmax ? `<span title="Focus points">◆ ${p.state.focus ?? fmax}/${fmax}</span>` : ''}${slotsLeft(p).slice(0, 1).map((e) => Object.entries(e.ranks).slice(-3).map(([r, [l, t]]) => `<span title="${esc(e.label)}: ${ordinal(r)} rank">${ordinal(r)} ${l}/${t}</span>`).join('')).join('')}</div>
+      ${spentLine(p)}
       ${p.state.conditions?.length ? `<div class="gm-conds">${condChips(p.state.conditions)}</div>` : ''}
       ${compLines(p).filter((c) => !c.shared).map((c) => `<div class="gm-comp"><span>${c.kind === 'familiar' ? '✦' : '🐾'} ${esc(c.name)}</span><span class="mono"><b>${c.cur}</b>/${c.max}${c.temp ? ` <span class="gm-temp">+${c.temp}</span>` : ''} · AC ${c.ac}</span></div>`).join('')}
     </button>`;
@@ -393,6 +408,7 @@ function openPc(p) {
   const dc = (mod) => 10 + mod;
   const res = slotsLeft(p);
   const fmax = ch.spellcasting.focus?.max || ch.focusMax || 0;
+  const inn = innateList(ch, p.state), daily = dailyList(ch, p.state), lim = limitedList(ch, p.state), cons = consumables(ch);
   m.body.innerHTML = `
     <p class="muted" style="margin-top:0">${esc([p.ch.ancestry?.name, p.ch.class?.name, 'level ' + p.build.level].filter(Boolean).join(' · '))}</p>
     <div class="gm-card-grid">
@@ -404,9 +420,16 @@ function openPc(p) {
         <p class="small muted">Saves ${signed(ch.saves.fortitude.total)} / ${signed(ch.saves.reflex.total)} / ${signed(ch.saves.will.total)} · Perception ${signed(ch.perception.total)} · Speed ${ch.speed?.total ?? '—'} ft</p></div>
       <div><h3 class="inv-h">Resources</h3>
         <p class="small">Hero points <b>${p.state.hero || 0}</b>${fmax ? ` · Focus <b>${p.state.focus ?? fmax}/${fmax}</b>` : ''}</p>
-        ${res.map((e) => `<p class="small"><span class="muted">${esc(e.label)}</span><br>${Object.entries(e.ranks).map(([r, [l, t]]) => `<span class="gm-slot ${l ? '' : 'out'}">${ordinal(r)} <b>${l}</b>/${t}</span>`).join(' ')}</p>`).join('') || '<p class="muted small">No spell slots.</p>'}</div>
+        ${res.map((e) => `<p class="small"><span class="muted">${esc(e.label)}</span><br>${Object.entries(e.ranks).map(([r, [l, t]]) => `<span class="gm-slot ${l ? '' : 'out'}">${ordinal(r)} <b>${l}</b>/${t}</span>`).join(' ')}</p>`).join('') || '<p class="muted small">No spell slots.</p>'}
+        ${inn.length ? `<p class="small"><span class="muted">Innate spells (once a day)</span><br>${inn.map((x) => `<span class="gm-slot ${x.used ? 'out' : ''}">${esc(x.name)}</span>`).join(' ')}</p>` : ''}
+        ${daily.map((d) => `<p class="small"><span class="muted">${esc(d.label)}</span> <b>${d.left}</b>/${d.max} left</p>`).join('')}</div>
     </div>
+    ${lim.length || cons.total ? `<div class="gm-card-grid" style="margin-top:12px">
+      ${lim.length ? `<div><h3 class="inv-h">Limited-use abilities</h3>${lim.map((x) => `<div class="gm-lim ${x.used >= x.max ? 'out' : ''}"><span>${x.ref ? `<a class="ref" data-ref="${esc(x.ref.slice(1))}">${esc(x.name)}</a>` : esc(x.name)} <span class="muted small">${esc(freqText(x))}</span></span><b>${x.used >= x.max ? 'used' : `${x.max - x.used}/${x.max}`}</b></div>`).join('')}</div>` : ''}
+      ${cons.total ? `<div><h3 class="inv-h">Consumables</h3>${cons.groups.filter((g) => g.kind !== 'ammo').map((g) => `<p class="small"><span class="muted">${esc(g.label)}</span><br>${g.items.map((i) => `${esc(i.name)}${i.qty > 1 ? ` <b>×${i.qty}</b>` : ''}`).join(', ')}</p>`).join('')}${cons.groups.filter((g) => g.kind === 'ammo').map((g) => `<p class="small muted">Ammunition: ${g.items.map((i) => `${esc(i.name)} ×${i.qty}`).join(', ')}</p>`).join('')}</div>` : ''}
+    </div>` : ''}
     <div class="row end" style="margin-top:12px"><a class="btn" href="${activeParty && store.user ? `sheet.html?party=${encodeURIComponent(activeParty)}&member=${encodeURIComponent(p.rec.id)}` : `sheet.html?id=${encodeURIComponent(p.rec.id)}`}">Open full sheet</a></div>`;
+  wireRefs(db, m.body);
 }
 
 // ------------------------------------------------------------------ encounter

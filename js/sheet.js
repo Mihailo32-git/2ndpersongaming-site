@@ -12,6 +12,7 @@ import { slotRows, ordinal, spellList, isCantrip, attrLabel } from './casting.js
 import { openSpellPicker, rarityBadge } from './pickers.js';
 import { openDrawer } from './drawer.js';
 import { renderCompanions } from './companion-ui.js';
+import { parseFreq, freqText, limitedList, RESET_TIERS } from './uses.js';
 
 // Wrapped in an async function instead of top-level await so older tablet browsers (Chrome 80+) can run it.
 (async () => {
@@ -51,8 +52,8 @@ if (!readOnly && charRec.id && store.conflictFor(charRec.id)) {
 }
 const build = normalizeBuild(charRec.build);
 const state = Object.assign({ hp: null, temp: 0, hero: 1, focus: null, dying: 0, wounded: 0, conditions: [], effects: [], raging: false, shieldRaised: false,
-  used: {}, prep: {}, innateUsed: {}, dailyUsed: {}, notes: '', companions: {} }, charRec.state || {});
-for (const k of ['used', 'prep', 'innateUsed', 'dailyUsed', 'companions']) state[k] = state[k] || {};
+  used: {}, prep: {}, innateUsed: {}, dailyUsed: {}, notes: '', companions: {}, freqUsed: {} }, charRec.state || {});
+for (const k of ['used', 'prep', 'innateUsed', 'dailyUsed', 'companions', 'freqUsed']) state[k] = state[k] || {};
 if (state.effects.length) await db.load(['spell-effects', 'feat-effects', 'equipment-effects']);
 let ch = null;
 let tab = sessionStorage.getItem('pf2e.sheetTab') || 'actions';
@@ -306,8 +307,8 @@ function actionGroups() {
   // Special: from class features, feats, archetypes, ancestry and items
   const seen = new Set();
   const special = [...ch.actions.map((a) => ({ rec: a.rec, src: a.source || '' })),
-    ...ch.feats.filter((f) => f.rec.action && f.rec.action !== 'passive').map((f) => ({ rec: f.rec, slot: f.slot, src: f.slot ? `${f.slot.label.replace(/ feat$/, '')} ${f.slot.level}` : f.source || 'Feat' })),
-    ...ch.features.filter((f) => f.rec.action && f.rec.action !== 'passive').map((f) => ({ rec: f.rec, src: f.source && f.source !== f.rec.name ? f.source : 'Class feature' }))]
+    ...ch.feats.filter((f) => (f.rec.action && f.rec.action !== 'passive') || f.rec.freq).map((f) => ({ rec: f.rec, slot: f.slot, src: f.slot ? `${f.slot.label.replace(/ feat$/, '')} ${f.slot.level}` : f.source || 'Feat' })),
+    ...ch.features.filter((f) => (f.rec.action && f.rec.action !== 'passive') || f.rec.freq).map((f) => ({ rec: f.rec, src: f.source && f.source !== f.rec.name ? f.source : 'Class feature' }))]
     .filter((x) => !SKILL_ACTIONS[x.rec.slug] && !['basic', 'exploration', 'downtime'].includes(x.rec.grp) && !seen.has(x.rec.slug) && seen.add(x.rec.slug))
     .map((x) => ({ ...x, head: originOf(x) }));
   return { basic, skill, special };
@@ -343,12 +344,19 @@ TAB_RENDER.actions = (el) => {
       return x.attack ? `<span class="act-roll mono" title="Multiple attack penalty">${signed(x.total)} <i>${signed(x.total - 5)}</i> <i>${signed(x.total - 10)}</i></span>` : `<span class="act-roll mono">${signed(x.total)}</span>`;
     }
     if (x.rolls && x.rolls.length) return `<span class="act-roll">${x.rolls.map((r) => `${esc(r.label)} <b class="mono">${signed(r.total)}</b>`).join(' · ')}</span>`;
-    if (x.src) return `<span class="src">${esc(x.src)}${x.rec.freq ? ' · ' + esc(x.rec.freq.replace('/', ' per ')) : ''}</span>`;
+    if (x.src) return `<span class="src">${esc(x.src)}${x.rec.freq ? ' · ' + esc(freqText(x.rec.freq)) : ''}</span>`;
     return '';
   };
   const row = (x) => `<div class="act-row ${x.cant ? 'cant' : ''}" data-row-show="${esc(refOf(x.rec))}" role="button" tabindex="0">
     <span class="glyph" title="${esc(COSTS.find((c) => c.id === costOf(x.rec))?.title || '')}">${actionGlyph(x.rec) || '<span class="muted">—</span>'}</span>
-    <span class="name">${esc(x.rec.name)}${x.trainedOnly ? ' <span class="badge">Trained</span>' : ''}${modeOf(x.rec) !== 'encounter' && !/^(Exploration|Downtime) activities$/.test(x.head || '') ? ` <span class="badge mode">${esc(titleCase(modeOf(x.rec)))}</span>` : ''}</span>${right(x)}</div>`;
+    <span class="name">${esc(x.rec.name)}${x.trainedOnly ? ' <span class="badge">Trained</span>' : ''}${modeOf(x.rec) !== 'encounter' && !/^(Exploration|Downtime) activities$/.test(x.head || '') ? ` <span class="badge mode">${esc(titleCase(modeOf(x.rec)))}</span>` : ''}</span>${right(x)}${usesPips(x.rec)}</div>`;
+  // Limited uses: one pip per use; tap to mark one used (tap again when all are used to clear them).
+  function usesPips(rec) {
+    const fr = rec.freq && parseFreq(rec.freq);
+    if (!fr) return '';
+    const used = Math.min(fr.max, state.freqUsed[rec.slug] || 0);
+    return `<button type="button" class="uses ${used >= fr.max ? 'spent' : ''}" data-uses="${esc(rec.slug)}" data-max="${fr.max}" ${readOnly ? 'disabled' : ''} aria-label="${esc(rec.name)}: ${used} of ${fr.max} used (${esc(freqText(fr))})" title="${esc(freqText(fr))}">${Array.from({ length: fr.max }, (_, i) => `<i class="${i < used ? 'on' : ''}"></i>`).join('')}<span>${used >= fr.max ? 'used' : fr.max - used + ' left'}</span></button>`;
+  }
   const draw = () => {
     const counts = {};
     for (const t of ACT_TABS) counts[t.id] = groups[t.id].filter(pass).length;
@@ -373,6 +381,26 @@ TAB_RENDER.actions = (el) => {
       const sub = actF.tab === 'skill' ? `<span class="act-head-roll">${rankBadge(h.headRank)}<b class="mono">${signed(h.headTotal)}</b></span>` : '';
       return `<div class="act-group"><h4 class="act-head"><span>${esc(h.head)}</span>${sub}</h4>${rows.map(row).join('')}</div>`;
     }).join('');
+    // Special actions: how many limited uses are spent, and resets for the short ones.
+    const lim = actF.tab === 'special' ? limitedList(ch, state) : [];
+    if (lim.length) {
+      const spent = lim.reduce((a, x) => a + x.used, 0), total = lim.reduce((a, x) => a + x.max, 0);
+      list.insertAdjacentHTML('afterbegin', `<div class="uses-bar"><span><b>Limited uses</b> <span class="muted">${spent} of ${total} spent · daily ones come back when you Rest</span></span>
+        ${readOnly ? '' : RESET_TIERS.filter((r) => lim.some((x) => x.tier <= r.tier && x.used)).map((r) => `<button type="button" class="chipbtn" data-ureset="${r.tier}">↺ ${esc(r.label)}</button>`).join('')}</div>`);
+    }
+    $$('[data-uses]', list).forEach((u) => (u.onclick = (e) => {
+      e.stopPropagation();
+      if (readOnly) return;
+      const slug = u.dataset.uses, max = Number(u.dataset.max);
+      state.freqUsed[slug] = ((state.freqUsed[slug] || 0) + 1) % (max + 1);
+      if (!state.freqUsed[slug]) delete state.freqUsed[slug];
+      saveState(); draw();
+    }));
+    $$('[data-ureset]', list).forEach((b) => (b.onclick = () => {
+      const t = Number(b.dataset.ureset);
+      for (const x of limitedList(ch, state)) if (x.tier <= t) delete state.freqUsed[x.slug];
+      saveState(); draw();
+    }));
     $$('[data-row-show]', list).forEach((r) => {
       const open = () => showRef(db, r.dataset.rowShow);
       r.onclick = open;
@@ -908,6 +936,8 @@ function wire() {
   if (sh) sh.onclick = () => { state.shieldRaised = !state.shieldRaised; change(); };
   $('#restBtn').onclick = () => {
     state.hp = ch.hp.max; state.temp = 0; state.focus = ch.spellcasting.focus.max || ch.focusMax; state.used = {}; state.innateUsed = {}; state.dailyUsed = {}; state.raging = false; state.shieldRaised = false;
+    // Limited uses come back too, except weekly (and longer) ones.
+    const keep = {}; for (const x of limitedList(ch, state)) if (x.tier > 4 && x.used) keep[x.slug] = x.used; state.freqUsed = keep;
     for (const e of Object.values(state.prep)) for (const p of Object.values(e)) if (p) p.cast = false;
     state.dying = 0; state.wounded = 0;
     state.conditions = state.conditions.filter((c) => !['frightened', 'off-guard', 'sickened', 'stunned', 'slowed', 'quickened', 'fatigued'].includes(c.slug));
