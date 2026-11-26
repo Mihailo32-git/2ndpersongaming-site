@@ -366,8 +366,32 @@ export function convertPathbuilder(data, db, engine) {
     }
   };
   fill(sc.entries.find((e) => e.id === 'class'), classCaster);
+  // Archetypes whose spells are innate, one per rank (Captivator): Pathbuilder lists them as a caster of
+  // their own; they go into that archetype's rank-by-rank picks.
+  const innArch = ch.feats.filter((f) => f.rec.archCasting?.role === 'innate');
+  const archFor = (c) => {
+    const w = norm(c.name).replace(/^archetype /, '').replace(/ (dedication|spellcasting)$/, '');
+    return innArch.filter((f) => norm(f.rec.arch || '') === w || norm(f.rec.name).includes(w));
+  };
+  const archDone = new Set();
   for (const c of pbCasters) {
-    if (c === classCaster || c.innate) continue;
+    const feats = c === classCaster ? [] : archFor(c);
+    if (!feats.length) continue;
+    archDone.add(c);
+    b.spells.innate = b.spells.innate || {};
+    for (const grp of c.spells || []) {
+      const rank = Number(grp.spellLevel) || 0;
+      for (const name of grp.list || []) {
+        const ref = spellRef(name); if (!ref) continue;
+        const f = feats.find((x) => (x.rec.archCasting.ranks || []).some(([lvl, r]) => r === rank && b.level >= lvl) && !(b.spells.innate[x.rec.slug] || {})[rank]);
+        if (f) (b.spells.innate[f.rec.slug] = b.spells.innate[f.rec.slug] || {})[rank] = ref;
+        else if (rank > 0 || !takenInnate.has(ref)) { b.spells.innateExtra.push({ ref, rank }); }
+        takenInnate.add(ref);
+      }
+    }
+  }
+  for (const c of pbCasters) {
+    if (c === classCaster || c.innate || archDone.has(c)) continue;
     const word = norm(c.name).replace(/^archetype /, '').replace(/ dedication$/, '');
     const e = sc.entries.find((x) => x.id !== 'class' && (norm(x.arch || '') === word || norm(x.label).startsWith(word)));
     if (e) fill(e, c);
@@ -377,7 +401,7 @@ export function convertPathbuilder(data, db, engine) {
   }
   // Innate spells: fill this character's own picks first, then add the rest by hand.
   const picks = sc.picks || [];
-  for (const c of pbCasters.filter((x) => x.innate)) {
+  for (const c of pbCasters.filter((x) => x.innate && !archDone.has(x))) {
     for (const grp of c.spells || []) {
       for (const name of grp.list || []) {
         const r = find('spells', name);

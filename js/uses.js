@@ -44,9 +44,17 @@ export function limitedList(ch, state) {
   return out.sort((a, b) => a.tier - b.tier || a.name.localeCompare(b.name));
 }
 /** Innate spells cast once a day: [{name, ref, rank, used}] (cantrips left out). */
+// Where an innate spell comes from, said short: "Basic Captivator Spellcasting" → "Captivator".
+const sourceLabel = (src) => String(src || 'Innate').replace(/^(Basic|Expert|Master|Legendary)\s+/, '').replace(/\s+(Spellcasting|Dedication)$/, '') || 'Innate';
 export function innateList(ch, state) {
   return (ch.spellcasting?.innate || []).filter((s) => s.rec && !(s.rec.traits || []).includes('cantrip') && !s.rec.cantrip)
-    .map((s) => ({ name: s.rec.name, ref: s.ref, rank: s.rank, used: !!(state.innateUsed || {})[s.ref] }));
+    .map((s) => ({ name: s.rec.name, ref: s.ref, rank: s.rank, source: sourceLabel(s.source), used: !!(state.innateUsed || {})[s.ref] }));
+}
+/** innateList grouped by where the spells come from: [{source, spells}] */
+export function innateGroups(ch, state) {
+  const out = [];
+  for (const x of innateList(ch, state)) { let g = out.find((y) => y.source === x.source); if (!g) out.push((g = { source: x.source, spells: [] })); g.spells.push(x); }
+  return out;
 }
 /** Daily resources (versatile vials, infused reagents…): [{label, max, left}] */
 export function dailyList(ch, state) {
