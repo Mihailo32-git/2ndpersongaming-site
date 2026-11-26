@@ -1,5 +1,5 @@
 {
-    "builtAt": "2026-11-25T14:05:47+00:00",
+    "builtAt": "2026-11-25T23:02:25+00:00",
     "foundryCommit": "0a508ab9",
     "counts": {
         "ancestries": 54,
@@ -17,9 +17,11 @@
         "spell-effects": 553,
         "equipment-effects": 773,
         "deities": 483,
-        "domains": 61
+        "domains": 61,
+        "creatures": 492
     },
     "textBuckets": {
+        "creatures": 16,
         "deities": 8,
         "feats": 64,
         "spells": 32,
