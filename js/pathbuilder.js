@@ -436,19 +436,43 @@ export function convertPathbuilder(data, db, engine) {
   const STRIKING = { striking: 1, greaterstriking: 2, majorstriking: 3 };
   const RESILIENT = { resilient: 1, greaterresilient: 2, majorresilient: 3 };
   const item = (rec, extra) => ({ id: uid(), ref: refOf(rec), qty: 1, equipped: false, invested: false, ...extra });
+  // Property runes and materials, named the way Pathbuilder names them (mapping after Pathmuncher, MIT).
+  const camel = (name) => String(name).replace(/['’]/g, '').split(/[^A-Za-z0-9]+/).filter(Boolean).map((w, i) => (i ? w[0].toUpperCase() + w.slice(1) : w[0].toLowerCase() + w.slice(1))).join('');
+  const pbRune = (p) => {
+    const res = p.match(/Energy Resistant - (.*)/i), vit = p.match(/Vitalizing(.*)/i), big = p.match(/(.*)\((Greater|Major|True|Lesser|Moderate)\)/i);
+    const name = res ? `${res[1]} Resistant` : vit ? `Disrupting${vit[1]}` : big ? `${big[2]} ${big[1].trim()}` : p === 'Quickstrike' ? 'speed' : p === 'Animated' ? 'dancing' : p;
+    return camel(name);
+  };
+  const applyRunes = (it, kind, runes, mat) => {
+    const table = db.runeData ? db.runeData[kind] : null;
+    const skipped = [];
+    for (const p of runes || []) {
+      const slug = pbRune(p);
+      if (!table || table[slug]) (it.runes = it.runes || []).push(slug); else skipped.push(p);
+    }
+    if (mat) {
+      const type = String(mat).split(' (')[0].trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const grade = /high-grade/i.test(mat) ? 'high' : /standard-grade/i.test(mat) ? 'standard' : 'low';
+      const known = !db.runeData || (db.runeData.materials[kind] || []).some((x) => x.slug === type);
+      if (known) it.material = { type, grade }; else skipped.push(mat);
+    }
+    return skipped;
+  };
   for (const w of pb.weapons || []) {
     const rec = find('equipment', w.name);
     if (!rec) { missing('Weapon', w.display || w.name); continue; }
-    b.inventory.push(item(rec, { qty: Number(w.qty) || 1, equipped: true, potency: Number(w.pot) || 0, striking: STRIKING[norm(w.str).replace(/ /g, '')] || 0 }));
-    const extras = [...(w.runes || []), w.mat].filter(Boolean);
-    if (extras.length) notes.push(`${w.display || w.name}: property runes / material (${extras.join(', ')}) not added`);
+    const wi = item(rec, { qty: Number(w.qty) || 1, equipped: true, potency: Number(w.pot) || 0, striking: STRIKING[norm(w.str).replace(/ /g, '')] || 0 });
+    b.inventory.push(wi);
+    const extras = applyRunes(wi, 'weapon', w.runes, w.mat);
+    if (extras.length) notes.push(`${w.display || w.name}: rune or material not recognised (${extras.join(', ')}); add it with the Runes button`);
   }
   for (const a of pb.armor || []) {
     const rec = find('equipment', a.name);
     if (!rec) { missing('Armor', a.display || a.name); continue; }
-    b.inventory.push(item(rec, { qty: Number(a.qty) || 1, equipped: !!a.worn, potency: Number(a.pot) || 0, resilient: RESILIENT[norm(a.res).replace(/ /g, '')] || 0 }));
-    const extras = [...(a.runes || []), a.mat].filter(Boolean);
-    if (extras.length) notes.push(`${a.display || a.name}: property runes / material (${extras.join(', ')}) not added`);
+    const ai = item(rec, { qty: Number(a.qty) || 1, equipped: !!a.worn, potency: Number(a.pot) || 0, resilient: RESILIENT[norm(a.res).replace(/ /g, '')] || 0 });
+    b.inventory.push(ai);
+    const extras = applyRunes(ai, 'armor', a.runes, a.mat);
+    if (extras.length) notes.push(`${a.display || a.name}: rune or material not recognised (${extras.join(', ')}); add it with the Runes button`);
   }
   for (const e of pb.equipment || []) {
     const [name, qty, tag] = Array.isArray(e) ? e : [e.name, e.qty, e.invested ? 'Invested' : ''];

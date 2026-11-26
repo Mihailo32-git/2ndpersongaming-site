@@ -9,6 +9,8 @@ import { toast, showRef, wireRefs, actionGlyph, rankBadge, esc } from './ui.js';
 import { ATTRS, ATTR_NAMES, SKILLS, RANKS, signed, titleCase, formatPrice, formatBulk, uid, refParts } from './util.js';
 import { choiceRows, wireChoiceRows, openFeatDrawer, openSpellPicker, rarityBadge, recDetail, wireShow } from './pickers.js';
 import { openDrawer } from './drawer.js';
+import { loadRunes, runeKind, itemRunes, materialLabel } from './runes.js';
+import { openRuneManager } from './runes-ui.js';
 import { renderSpellsEditor, storeFor } from './spellsui.js';
 import { CASTERS, ARCH_SLOTS, ordinal, innatePickOptions } from './casting.js';
 
@@ -39,6 +41,7 @@ if (charRec.id && store.conflictFor(charRec.id)) {
   if (pick === 'mine') { await store.save(charRec, { force: true }).catch((e) => toast(e.message, 'error')); }
 }
 if ((build.inventory || []).length || (build.formulas || []).length) await db.load(['equipment']);
+await loadRunes(db);
 let ch = engine.compute(build);
 
 // ------------------------------------------------------------------ saving
@@ -861,7 +864,7 @@ RENDER.gear = (root) => {
         it.equipped = i.checked; redraw();
       }));
       $$('[data-invest]', invCol).forEach((i) => (i.onchange = () => { find(i.dataset.invest).invested = i.checked; update(false); }));
-      $$('[data-rune]', invCol).forEach((sel) => (sel.onchange = () => { find(sel.dataset.id)[sel.dataset.rune] = Number(sel.value); update(false); }));
+      $$('[data-runeman]', invCol).forEach((btn) => (btn.onclick = () => { const it = find(btn.dataset.runeman); if (it) openRuneManager({ db, it, level: ch.level, onChange: () => { update(false); drawInv(); } }); }));
       $$('[data-sell]', invCol).forEach((b) => (b.onclick = () => { build.inventory = build.inventory.filter((x) => x.id !== b.dataset.sell); redraw(); }));
       $$('[data-show]', invCol).forEach((el) => (el.onclick = () => showRef(db, el.dataset.show)));
       const af = $('#addFormula', invCol);
@@ -873,13 +876,12 @@ RENDER.gear = (root) => {
   function invRow(it) {
     const r = it.rec;
     const canEquip = ['weapon', 'armor', 'shield'].includes(r.type) && !(r.traits || []).includes('consumable');
-    const pot = (n) => `<option value="${n}" ${it.potency == n ? 'selected' : ''}>+${n} potency</option>`;
-    const runes = r.type === 'weapon' && canEquip ? `
-        <select data-rune="potency" data-id="${esc(it.id)}" aria-label="Potency rune"><option value="0">No potency</option>${[1, 2, 3].map(pot).join('')}</select>
-        <select data-rune="striking" data-id="${esc(it.id)}" aria-label="Striking rune"><option value="0">No striking</option>${['striking', 'greater striking', 'major striking'].map((n, i) => `<option value="${i + 1}" ${it.striking == i + 1 ? 'selected' : ''}>${n}</option>`).join('')}</select>`
-      : r.type === 'armor' ? `
-        <select data-rune="potency" data-id="${esc(it.id)}" aria-label="Potency rune"><option value="0">No potency</option>${[1, 2, 3].map(pot).join('')}</select>
-        <select data-rune="resilient" data-id="${esc(it.id)}" aria-label="Resilient rune"><option value="0">No resilient</option>${['resilient', 'greater resilient', 'major resilient'].map((n, i) => `<option value="${i + 1}" ${it.resilient == i + 1 ? 'selected' : ''}>${n}</option>`).join('')}</select>` : '';
+    // Runes and special material: badges, and a Runes button that opens the same window as on the sheet.
+    const b = (t, cls = '') => `<span class="badge ${cls}">${esc(t)}</span>`;
+    const runes = runeKind(r) ? `<span class="rune-sum">${[it.potency ? b('+' + it.potency) : '', it.striking ? b(['', 'striking', 'greater striking', 'major striking'][it.striking]) : '',
+      it.resilient ? b(['', 'resilient', 'greater resilient', 'major resilient'][it.resilient]) : '', ...itemRunes(db, it).filter((x) => x.fits).map((x) => b(x.name, 'rune-badge')),
+      it.material && it.material.type ? b(materialLabel(db, it.material), 'mat-badge') : ''].filter(Boolean).join(' ')}</span>
+        <button type="button" class="btn small" data-runeman="${esc(it.id)}">Runes</button>` : '';
     return `<div class="entry"><div class="grow"><span class="name" data-show="${esc(it.ref)}">${esc(r.name)}</span> <span class="muted small">${esc(formatPrice(r.price))} · ${esc(formatBulk(r.bulk))}</span>
       <div class="row small" style="margin-top:4px">
         <input type="number" class="num" min="0" value="${it.qty || 1}" data-qty="${esc(it.id)}" aria-label="Quantity">

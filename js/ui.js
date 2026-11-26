@@ -41,6 +41,9 @@ export function modal(title, { wide = false, onClose, cls = '' } = {}) {
   const el = h(`<div class="modal-back"><div class="modal ${wide ? 'wide' : ''} ${esc(cls)}" role="dialog" aria-modal="true" aria-label="${esc(title)}">
     <header><button class="back" hidden aria-label="Back">‹</button><h2>${esc(title)}</h2><button class="close" aria-label="Close">×</button></header>
     <div class="modal-body"></div></div></div>`);
+  // Above whatever is open already (a rules window opened from a drawer stays on top).
+  const top = Math.max(0, ...[...document.querySelectorAll('.modal-back, .drawer, .drawer-back')].map((x) => Number(getComputedStyle(x).zIndex) || 0));
+  if (top >= 100) el.style.zIndex = String(top + 2);
   document.body.appendChild(el);
   document.body.classList.add('noscroll');
   let closed = false;

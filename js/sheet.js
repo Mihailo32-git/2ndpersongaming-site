@@ -14,6 +14,8 @@ import { openDrawer } from './drawer.js';
 import { renderCompanions } from './companion-ui.js';
 import { parseFreq, freqText, limitedList, RESET_TIERS, hasAlchemy, alchemyInfo, isAlchemyCraft, formulaFamily } from './uses.js';
 import { portraitSrc, pickImage, makePortrait } from './portrait.js';
+import { loadRunes, runeKind, itemRunes, materialLabel, runeRef } from './runes.js';
+import { openRuneManager } from './runes-ui.js';
 
 // Wrapped in an async function instead of top-level await so older tablet browsers (Chrome 80+) can run it.
 (async () => {
@@ -62,6 +64,7 @@ for (const k of Object.keys(state.companions)) state.companions[k] = asObj(state
 state.alchemy.prep = asObj(state.alchemy.prep);
 if (!Array.isArray(state.favEffects)) state.favEffects = [];
 if (state.effects.length || state.favEffects.length) await db.load(['spell-effects', 'feat-effects', 'equipment-effects']);
+await loadRunes(db);
 let ch = null;
 let tab = sessionStorage.getItem('pf2e.sheetTab') || 'actions';
 document.title = (build.name || 'Character') + ' — PF2e sheet';
@@ -397,10 +400,12 @@ TAB_RENDER.actions = (el) => {
     ? `<label class="st-tog ${t.on ? 'on' : ''}" title="${esc(t.source)}"><span>${t.option === 'bomber-field-vials' ? 'Vial damage' : esc(t.label)}</span><select data-tog="${esc(t.option)}" ${readOnly ? 'disabled' : ''}><option value="">${t.option === 'bomber-field-vials' ? 'Acid (normal)' : 'Off'}</option>${t.subs.map((x) => `<option value="${esc(x.value)}" ${t.on === x.value ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></label>`
     : `<label class="st-tog ${t.on ? 'on' : ''}" title="${esc(t.source)}"><input type="checkbox" data-tog="${esc(t.option)}" ${t.on ? 'checked' : ''} ${readOnly ? 'disabled' : ''}><span>${esc(t.label)}</span></label>`)).join('')}</div>` : ''}${ch.strikes.map((s) => `
     <div class="strike"><div class="s-name" ${s.rec._pack ? `data-show="${esc(refOf(s.rec))}" role="button"` : ''}><b>${esc(s.name)}${s.item && s.item.qty > 1 ? ` <span class="muted small">×${s.item.qty}</span>` : ''}</b>${s.item && s.item.left != null ? ` <span class="badge ${s.item.left ? '' : 'warn'}">${s.item.left} left${s.item.infused ? ' · infused' : ''}</span>` : ''}
-      <div class="s-traits">${esc([s.ranged ? 'Ranged' + (s.range ? ' ' + s.range + ' ft' : '') : 'Melee', ...s.traits.filter((t) => t !== 'consumable').map(titleCase)].join(' · '))}</div></div>
+      <div class="s-traits">${esc([s.ranged ? 'Ranged' + (s.range ? ' ' + s.range + ' ft' : '') : 'Melee', ...s.traits.filter((t) => t !== 'consumable').map(titleCase)].join(' · '))}</div>
+      ${(s.runes || []).length || s.material ? `<div class="s-runes">${(s.runes || []).map((r) => { const ref = runeRef(db, db.runeData?.weapon?.[r.slug]); return `<span class="badge rune-badge" ${ref ? `data-show="${esc(ref)}" role="button"` : ''}>${esc(r.name)}</span>`; }).join(' ')}${s.material ? ` <span class="badge mat-badge">${esc(materialLabel(db, s.material))}</span>` : ''}</div>` : ''}</div>
       <div class="atk" aria-label="Attack bonuses"><span>${signed(s.attack)}</span><span>${signed(s.map[0])}</span><span>${signed(s.map[1])}</span></div>
       <div class="dmg">${esc(s.damage)}${s.persistent ? `<div class="tiny muted">${esc(s.persistent)}</div>` : ''}${s.splash ? `<div class="tiny muted">${s.splash} splash</div>` : ''}</div>
-      ${s.notes.length || s.dmgNotes.length ? `<div class="s-notes">${[...s.notes, ...s.dmgNotes].map((n) => `${signed(n.value)} ${esc(n.label)} (situational)`).join(' · ')}</div>` : ''}</div>`).join('')}
+      ${s.notes.length || s.dmgNotes.length ? `<div class="s-notes">${[...s.notes, ...s.dmgNotes].map((n) => `${signed(n.value)} ${esc(n.label)} (situational)`).join(' · ')}</div>` : ''}
+      ${(s.runeNotes || []).length ? `<div class="s-notes s-rune-notes">${s.runeNotes.map((n) => `<div><b>${esc(n.label)}.</b> ${esc(n.text)}</div>`).join('')}</div>` : ''}</div>`).join('')}
     <div class="act-tools">
       <div class="act-seg" role="tablist" aria-label="Kinds of actions">${ACT_TABS.map((t) => `<button type="button" role="tab" data-acttab="${t.id}" aria-selected="${actF.tab === t.id}">${t.label} <span class="n"></span></button>`).join('')}</div>
       <label class="act-search"><span class="sr-only">Search actions</span><input type="search" placeholder="Search actions…" value="${esc(actF.q)}" autocomplete="off" enterkeyhint="search"></label>
@@ -693,6 +698,56 @@ function wornLabel(u) {
 const invF = Object.assign({ tab: 'cons', cons: 'all' }, (() => { try { return JSON.parse(sessionStorage.getItem('pf2e.invTab') || '{}'); } catch (e) { return {}; } })());
 const saveInvF = () => { try { sessionStorage.setItem('pf2e.invTab', JSON.stringify(invF)); } catch (e) { /* ignore */ } };
 
+// Fundamental runes, property runes (only the ones that fit the potency) and special material, as small badges.
+function runeBadges(it) {
+  const b = (t, cls = '') => `<span class="badge ${cls}">${esc(t)}</span>`;
+  return [it.potency ? b('+' + it.potency) : '', it.striking ? b(['', 'striking', 'greater striking', 'major striking'][it.striking]) : '',
+    it.resilient ? b(['', 'resilient', 'greater resilient', 'major resilient'][it.resilient]) : '',
+    ...itemRunes(db, it).filter((r) => r.fits).map((r) => b(r.name, 'rune-badge')),
+    it.material && it.material.type ? b(materialLabel(db, it.material), 'mat-badge') : ''].filter(Boolean).join(' ');
+}
+function wireRunesShop(el) {
+  $$('[data-runes]', el).forEach((b) => (b.onclick = (e) => {
+    e.stopPropagation();
+    const it = build.inventory.find((x) => x.id === b.dataset.runes); if (!it) return;
+    openRuneManager({ db, it, level: ch.level, readOnly, onChange: () => { saveBuild(); change(); } });
+  }));
+  $$('[data-shop]', el).forEach((b) => (b.onclick = openShop));
+}
+// The shop, in a panel over the sheet: search, filter by kind, read an item, then buy it (or add it without paying).
+const SHOP_KINDS = [['weapon', 'Weapons', (r) => r.type === 'weapon' && !(r.traits || []).includes('consumable')], ['armor', 'Armor & shields', (r) => r.type === 'armor' || r.type === 'shield'],
+  ['consumable', 'Consumables', (r) => r.type === 'consumable' || (r.traits || []).includes('consumable') || r.type === 'ammo'], ['worn', 'Worn & held items', (r) => r.type === 'equipment' && /worn|held/.test(r.usage || '')],
+  ['gear', 'Other gear', (r) => ['equipment', 'backpack', 'kit', 'book'].includes(r.type) && !/worn|held/.test(r.usage || '')]];
+function openShop() {
+  let free = false;
+  const items = db.list('equipment').filter((r) => r.type !== 'treasure' && r.price != null && (build.options.showRare !== false || r.rarity === 'common'))
+    .map((r) => ({ key: refOf(r), name: r.name, level: r.level, rarity: r.rarity, rec: r, disabled: r.level > ch.level,
+      meta: [formatPrice(r.price) + (r.per > 1 ? ' for ' + r.per : ''), r.bulk ? formatBulk(r.bulk) + ' bulk' : ''].filter(Boolean).join(' · ') }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const sub = () => `Money <b>${build.money ? esc(formatPrice(build.money)) : "0 gp"}</b> · <label class="check small" style="display:inline-flex"><input type="checkbox" data-free ${free ? 'checked' : ''}> Add without paying</label>`;
+  const refreshSub = () => { const d = [...document.querySelectorAll('.drawer')].pop(); const s = d && d.querySelector('.dr-sub'); if (s) { s.innerHTML = sub(); const f = s.querySelector('[data-free]'); if (f) f.onchange = () => { free = f.checked; }; } };
+  openDrawer({
+    title: 'Shop', subtitle: sub(), items, db, hideDisabled: true, allowDisabled: true, placeholder: 'Search items…',
+    chips: [{ id: 'all', label: 'All' }, ...SHOP_KINDS.map(([id, label, t]) => ({ id, label, test: (x) => t(x.rec) }))],
+    detail: (x) => `<h3>${esc(x.name)}</h3><p class="muted small">Level ${x.level} · ${esc(titleCase(x.rec.type))} · ${esc(formatPrice(x.rec.price))}${x.rec.per > 1 ? ' for ' + x.rec.per : ''} · ${x.rec.bulk ? esc(formatBulk(x.rec.bulk)) + ' bulk' : 'negligible bulk'}</p>${traitChips(x.rec.traits, x.rec.rarity)}`,
+    textRef: (x) => x.key, canPick: () => true,
+    pickLabel: (x) => (free ? 'Add ' : 'Buy for ' + formatPrice(x.rec.price) + ' · ') + x.name,
+    onPick: (x) => {
+      const r = x.rec;
+      if (!free && (build.money ?? 0) < r.price) { toast('Not enough money. Tick “Add without paying” to add it anyway.', 'error'); return false; }
+      if (!free) build.money = (build.money ?? 0) - r.price;
+      const stack = !['weapon', 'armor', 'shield'].includes(r.type) || (r.traits || []).includes('consumable');
+      const existing = stack && build.inventory.find((y) => y.ref === x.key);
+      if (existing) existing.qty = (existing.qty || 1) + (r.per > 1 ? r.per : 1);
+      else build.inventory.push({ id: Math.random().toString(36).slice(2, 10), ref: x.key, qty: r.per > 1 ? r.per : 1, equipped: false, invested: false });
+      saveBuild(); change(); refreshSub();
+      toast(`${free ? 'Added' : 'Bought'} ${r.name}${existing ? ` (now ${existing.qty})` : ''}`, 'ok');
+      return false;
+    },
+  });
+  refreshSub();
+}
+
 TAB_RENDER.equipment = (el) => {
   const items = ch.inventory.map((it) => ({ it, k: invKind(it.rec) }));
   const armor = items.filter((x) => x.k.slot === 'armor' && x.it.equipped);
@@ -703,7 +758,8 @@ TAB_RENDER.equipment = (el) => {
   const treasure = items.filter((x) => x.k.group === 'treasure');
   const hands = held.reduce((a, x) => a + (x.k.hands || 1), 0);
   const invested = ch.inventory.filter((x) => x.invested).length;
-  const runes = (it) => `${it.potency ? `<span class="badge">+${it.potency}</span>` : ''}${it.striking ? `<span class="badge">${['', 'striking', 'greater striking', 'major striking'][it.striking]}</span>` : ''}${it.resilient ? `<span class="badge">${['', 'resilient', 'greater resilient', 'major resilient'][it.resilient]}</span>` : ''}`;
+  const runes = runeBadges;
+  const runeBtn = (it) => (runeKind(it.rec) ? `<button type="button" class="btn small" data-runes="${esc(it.id)}">Runes</button>` : '');
   const qty = (it) => (it.qty > 1 ? ` <span class="inv-qty">×${it.qty}</span>` : '');
   const row = ({ it, k }, sub, actions) => `<div class="inv-item" data-row-show="${esc(it.ref)}">${invIcon(k.icon)}
     <div class="inv-main"><div class="inv-name">${esc(it.rec.name)}${qty(it)} ${runes(it)}</div><div class="inv-sub">${sub}</div></div>
@@ -716,10 +772,10 @@ TAB_RENDER.equipment = (el) => {
   const consCount = (id) => (id === 'all' ? cons.length : cons.filter((x) => x.k.cons === id).length);
 
   const armorSlot = armor.length
-    ? armor.map((x) => row(x, `AC +${x.it.rec.ac || 0}${x.it.potency ? ` (+${x.it.potency} rune)` : ''} · Dex cap ${x.it.rec.dexCap ?? '—'}${x.it.rec.checkPen ? ` · check ${x.it.rec.checkPen}` : ''}${x.it.rec.speedPen ? ` · speed ${x.it.rec.speedPen} ft` : ''}`, btn('data-stow', x.it.id, 'Take off'))).join('')
+    ? armor.map((x) => row(x, `AC +${x.it.rec.ac || 0}${x.it.potency ? ` (+${x.it.potency} rune)` : ''} · Dex cap ${x.it.rec.dexCap ?? '—'}${x.it.rec.checkPen ? ` · check ${x.it.rec.checkPen}` : ''}${x.it.rec.speedPen ? ` · speed ${x.it.rec.speedPen} ft` : ''}`, runeBtn(x.it) + (readOnly ? '' : btn('data-stow', x.it.id, 'Take off')))).join('')
     : `<div class="inv-empty">${invIcon('armor')}<span>No armor. ${gear.some((x) => x.k.slot === 'armor') ? 'Wear one from your gear.' : 'Unarmored.'}</span></div>`;
   const heldRows = held.length
-    ? held.map((x) => row(x, [x.k.hands === 2 ? '2 hands' : '1 hand', x.it.rec.type === 'weapon' && x.it.rec.damage ? esc(x.it.rec.damage.dice + x.it.rec.damage.die + ' ' + (x.it.rec.damage.type || '')) : x.it.rec.type === 'shield' ? `+${x.it.rec.shieldAc || 2} AC raised · Hardness ${x.it.rec.hardness}` : '', bulk(x.it.rec)].filter(Boolean).join(' · '), btn('data-stow', x.it.id, 'Stow'))).join('')
+    ? held.map((x) => row(x, [x.k.hands === 2 ? '2 hands' : '1 hand', x.it.rec.type === 'weapon' && x.it.rec.damage ? esc(x.it.rec.damage.dice + x.it.rec.damage.die + ' ' + (x.it.rec.damage.type || '')) : x.it.rec.type === 'shield' ? `+${x.it.rec.shieldAc || 2} AC raised · Hardness ${x.it.rec.hardness}` : '', bulk(x.it.rec)].filter(Boolean).join(' · '), runeBtn(x.it) + (readOnly ? '' : btn('data-stow', x.it.id, 'Stow')))).join('')
     : `<div class="inv-empty">${invIcon('weapon')}<span>Empty hands. Wield a weapon, shield or staff from your gear.</span></div>`;
   const wornRows = worn.length
     ? worn.map((x) => row(x, [wornLabel(x.it.rec.usage), bulk(x.it.rec)].filter(Boolean).join(' · '), investBtn(x.it) + btn('data-stow', x.it.id, 'Remove'))).join('')
@@ -733,7 +789,7 @@ TAB_RENDER.equipment = (el) => {
     pack = gear.map((x) => {
       const act = x.k.slot === 'armor' ? btn('data-equip', x.it.id, 'Wear') : x.k.slot === 'hands' ? btn('data-equip', x.it.id, 'Wield') : x.k.slot === 'worn' ? btn('data-equip', x.it.id, 'Wear') : '';
       const sub = [x.k.slot === 'hands' ? (x.k.hands === 2 ? '2 hands' : '1 hand') : x.k.slot === 'worn' ? wornLabel(x.it.rec.usage) : x.k.slot === 'armor' ? 'Armor' : titleCase(x.it.rec.type === 'equipment' ? 'gear' : x.it.rec.type), bulk(x.it.rec)].filter(Boolean).join(' · ');
-      return row(x, sub, act);
+      return row(x, sub, runeBtn(x.it) + act);
     }).join('') || '<p class="muted small">Everything you own is equipped.</p>';
   } else {
     const cp = build.money || 0;
@@ -750,7 +806,7 @@ TAB_RENDER.equipment = (el) => {
       <div class="inv-stat"><span class="label">Hands</span><b class="${hands > 2 ? 'bad' : ''}">${hands}</b><span class="muted">/ 2</span></div>
       <div class="inv-stat"><span class="label">Invested</span><b class="${invested > 10 ? 'bad' : ''}">${invested}</b><span class="muted">/ 10</span></div>
       <div class="inv-stat"><span class="label">Money</span><b>${esc(formatPrice(build.money))}</b></div>
-      ${readOnly ? '' : `<a class="btn small no-print" href="builder.html?id=${encodeURIComponent(charRec.id)}#gear">Shop &amp; edit</a>`}
+      ${readOnly ? '' : '<button type="button" class="btn small no-print" data-shop>Shop &amp; add items</button>'}
     </div>
     ${ch.bulk.total > ch.bulk.encumbered ? (state.conditions.some((c) => c.slug === 'encumbered')
       ? '<div class="notice warn-note">Over your Bulk limit: Encumbered is applied (clumsy 1, −10 ft Speed).</div>'
@@ -772,6 +828,7 @@ TAB_RENDER.equipment = (el) => {
 
   const find = (id) => build.inventory.find((x) => x.id === id);
   const commit = () => { saveBuild(); change(); };
+  wireRunesShop(el);
   $$('[data-invtab]', el).forEach((b) => (b.onclick = () => { invF.tab = b.dataset.invtab; saveInvF(); TAB_RENDER.equipment(el); wireInv(el); }));
   $$('[data-cons]', el).forEach((b) => (b.onclick = () => { invF.cons = b.dataset.cons; saveInvF(); TAB_RENDER.equipment(el); wireInv(el); }));
   if (readOnly) return;
@@ -840,7 +897,7 @@ TAB_RENDER.inventory = (el) => {
     shown = shown.slice().sort(by);
     const tb = shown.reduce((a, r) => a + r.bulk, 0), tv = shown.reduce((a, r) => a + r.value, 0);
     $('.il-body', el).innerHTML = shown.map((r) => `<div class="il-row" data-row-show="${esc(r.it.ref)}">
-        <div class="il-name">${invIcon(r.k.icon)}<span><b>${esc(r.it.rec.name)}</b>${r.it.potency ? ` <span class="badge">+${r.it.potency}</span>` : ''}${r.it.striking ? ` <span class="badge">${['', 'striking', 'greater striking', 'major striking'][r.it.striking]}</span>` : ''}${r.it.resilient ? ` <span class="badge">${['', 'resilient', 'greater resilient', 'major resilient'][r.it.resilient]}</span>` : ''}<span class="il-lvl">${r.it.rec.level ? 'Level ' + r.it.rec.level : ''}</span></span></div>
+        <div class="il-name">${invIcon(r.k.icon)}<span><b>${esc(r.it.rec.name)}</b> ${runeBadges(r.it)}${runeKind(r.it.rec) ? ` <button type="button" class="linkish small no-print" data-runes="${esc(r.it.id)}">Runes</button>` : ''}<span class="il-lvl">${r.it.rec.level ? 'Level ' + r.it.rec.level : ''}</span></span></div>
         <div class="il-qty">${readOnly ? `<span class="mono">${r.it.qty || 1}</span>` : `<button type="button" class="step" data-qdown="${esc(r.it.id)}" aria-label="One less ${esc(r.it.rec.name)}">${(r.it.qty || 1) > 1 ? '−' : '×'}</button><span class="mono">${r.it.qty || 1}</span><button type="button" class="step" data-qup="${esc(r.it.id)}" aria-label="One more ${esc(r.it.rec.name)}">+</button>`}</div>
         <div class="il-where"><span class="where-tag w-${r.where.toLowerCase()}">${r.where}</span></div>
         <div class="il-num">${r.bulk ? esc(formatBulk(Math.round(r.bulk * 10) / 10)) : '—'}</div>
@@ -848,6 +905,7 @@ TAB_RENDER.inventory = (el) => {
       </div>`).join('') || '<p class="muted small" style="padding:10px">Nothing here.</p>';
     $('.il-foot', el).innerHTML = `<span>${shown.length} item${shown.length === 1 ? '' : 's'}</span><span>Bulk <b>${esc(formatBulk(Math.round(tb * 10) / 10))}</b></span><span>Value <b>${esc(formatPrice(tv))}</b></span><span>Money <b>${esc(formatPrice(build.money))}</b></span>`;
     wireInv(el);
+    wireRunesShop(el);
     const find = (id) => build.inventory.find((x) => x.id === id);
     $$('[data-qup]', el).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const it = find(b.dataset.qup); if (!it) return; it.qty = (it.qty || 1) + 1; saveBuild(); change(); }));
     $$('[data-qdown]', el).forEach((b) => (b.onclick = async (e) => {
@@ -866,7 +924,7 @@ TAB_RENDER.inventory = (el) => {
       <label class="il-sort"><span class="sr-only">Sort by</span><select aria-label="Sort by">
         ${[['name', 'Name'], ['where', 'Where it is'], ['bulk', 'Bulk'], ['value', 'Value']].map(([v, l]) => `<option value="${v}" ${invL.sort === v ? 'selected' : ''}>Sort: ${l}</option>`).join('')}
       </select></label>
-      ${readOnly ? '' : `<a class="btn small no-print" href="builder.html?id=${encodeURIComponent(charRec.id)}#gear">Shop &amp; add items</a>`}
+      ${readOnly ? '' : '<button type="button" class="btn small no-print" data-shop>Shop &amp; add items</button>'}
     </div>
     <div class="inv-chips" role="group" aria-label="Kind of item">${LIST_KINDS.filter((t) => t.id === 'all' || count(t.id)).map((t) => `<button type="button" class="chip-btn ${invL.kind === t.id ? 'on' : ''}" data-lkind="${t.id}">${t.label} <span class="n">${count(t.id)}</span></button>`).join('')}</div>
     <div class="il-table">
@@ -1077,7 +1135,7 @@ TAB_RENDER.notes = (el) => {
 
 // ------------------------------------------------------------------ events
 function wire() {
-  $$('[data-show]', main).forEach((e) => (e.onclick = (ev) => { ev.preventDefault(); showRef(db, e.dataset.show); }));
+  $$('[data-show]', main).forEach((e) => (e.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); showRef(db, e.dataset.show); }));
   wireRefs(db, main);
   $$('[role=tab][data-tab]', main).forEach((b) => (b.onclick = () => { tab = b.dataset.tab; sessionStorage.setItem('pf2e.sheetTab', tab); render(); }));
   $$('[data-bd]', main).forEach((p) => (p.onclick = () => {

@@ -26,10 +26,12 @@ export function openDrawer(opts) {
   const depth = document.querySelectorAll('.drawer').length;
   const back = document.createElement('div');
   back.className = 'drawer-back';
-  back.style.zIndex = String(95 + depth * 2);
+  // Above whatever is open already (a drawer opened from a window, such as the rune picker from the Runes window).
+  const top = Math.max(94, ...[...document.querySelectorAll('.modal-back, .drawer, .drawer-back')].map((x) => Number(getComputedStyle(x).zIndex) || 0));
+  back.style.zIndex = String(Math.max(95 + depth * 2, top + 1));
   const el = document.createElement('aside');
   el.className = 'drawer' + (o.narrow || o.instant ? ' narrow' : '');
-  el.style.zIndex = String(96 + depth * 2);
+  el.style.zIndex = String(Math.max(96 + depth * 2, top + 2));
   el.setAttribute('role', 'dialog');
   el.setAttribute('aria-modal', 'true');
   el.setAttribute('aria-label', o.title || 'Choose');

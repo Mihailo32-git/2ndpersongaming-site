@@ -251,6 +251,23 @@ export class Engine {
       const rules = (rec.rules || []).filter((r) => WORN_RULES.includes(r.key) && !/\{item\|flags/.test(JSON.stringify(r)));
       if (rules.length) this._item(ch, { ...rec, rules }, 'inv:' + it.id, rec.name, 1);
     }
+    // Worn armor's property runes with plain effects: Shadow (Stealth), Slick (Escape and Squeeze), energy-resistant runes.
+    for (const it of build.inventory || []) {
+      if (!it.equipped || !Array.isArray(it.runes) || !it.runes.length) continue;
+      const rec = db.get(it.ref);
+      if (!rec || rec.type !== 'armor') continue;
+      const rules = [];
+      for (const slug of it.runes.slice(0, Math.max(0, Math.min(3, Number(it.potency) || 0)))) {
+        const tier = /^major/.test(slug) ? 3 : /^greater/.test(slug) ? 2 : 1;
+        const base = slug.replace(/^(major|greater)/, '').replace(/^\w/, (c) => c.toLowerCase());
+        const label = db.runeData?.armor?.[slug]?.name || slug;
+        let m;
+        if (base === 'shadow') rules.push({ key: 'FlatModifier', selector: 'stealth', type: 'item', value: tier, label });
+        else if (base === 'slick') rules.push({ key: 'FlatModifier', selector: 'acrobatics', type: 'item', value: tier, label: label + ' (Escape, Squeeze)', predicate: [{ or: ['action:escape', 'action:squeeze'] }] });
+        else if ((m = base.match(/^(acid|cold|electricity|fire|sonic)Resistant$/))) rules.push({ key: 'Resistance', type: m[1], value: tier >= 2 ? 10 : 5 });
+      }
+      if (rules.length) this._item(ch, { ...rec, name: rec.name + ' runes', slug: rec.slug + '-runes', rules }, 'runes:' + it.id, rec.name, 1);
+    }
 
     this._attributes(ch);
     this._proficiencies(ch);
@@ -1162,13 +1179,46 @@ export class Engine {
         const own = stackMods(pMods.filter((m) => !m.damageType)).total;
         if (own > 0) persistent = `${pb} persistent ${pType}`.trim();
       }
+      // Property runes (Flaming: +1d6 fire, and 1d10 persistent fire on a critical hit…), one per point of potency.
+      const runeDice = [], runeNotes = [], runeTags = [], persistExtra = [];
+      const RD = this.db.runeData;
+      if (item && RD && Array.isArray(item.runes) && item.runes.length && rec.type === 'weapon') {
+        const rOpts = new Set([...ch.options, ...(ch.stateOptions || []), ...wOpts, 'item:damage:type:' + dmgType]);
+        // null: the rune's extra damage depends on the target (Holy: 2d4 instead of 1d4 against unholy creatures).
+        const okPred = (p) => (!p || !p.length ? true : JSON.stringify(p).includes('target:') ? null : test(p, rOpts));
+        const against = (p) => { const m = JSON.stringify(p).match(/target:trait:([\w-]+)/); return m ? `${m[1]} creatures` : 'some targets'; };
+        for (const slug of item.runes.slice(0, Math.max(0, Math.min(3, Number(potency) || 0)))) {
+          const r = RD.weapon[slug];
+          if (!r) continue;
+          runeTags.push({ slug, name: r.name });
+          for (const x of r.extra || []) {
+            const ok = okPred(x.pred);
+            const dice = `${x.n ? x.n + (x.die || '') : ''}${x.mod ? (x.n && x.mod > 0 ? '+' : '') + x.mod : ''}` || '1';
+            const pers = x.cat === 'persistent' || x.type === 'bleed';
+            const what = `${dice} ${pers ? 'persistent ' : ''}${x.type}`;
+            if (ok === null) {
+              if (JSON.stringify(x.pred).includes('"not"')) runeDice.push(` + ${dice} ${x.type}`);
+              else runeNotes.push({ label: r.name, text: `${what} instead against ${against(x.pred)}.` });
+            } else if (!ok) continue;
+            else if (x.crit) runeNotes.push({ label: r.name, text: `Critical hit: also ${what}.`, crit: true });
+            else if (pers) persistExtra.push(what);
+            else runeDice.push(` + ${dice} ${x.type}`);
+          }
+          for (const n of [...(r.notes || []), ...(r.attackNotes || [])]) {
+            if (okPred(n.pred) === false) continue;
+            runeNotes.push({ label: r.name, text: n.text, crit: (n.outcome || []).includes('criticalSuccess') });
+          }
+        }
+      }
+      if (persistExtra.length) persistent = [persistent, ...persistExtra].filter(Boolean).join(', ');
       // Flat damage (die "") such as Acid Flask's 1 acid.
       const die = rec.damage ? (rec.damage.die || '') : 'd4';
       return {
         name: rec.name, rec, item, source, attack, rank, attr, traits, ranged,
         map: agile ? [attack - 4, attack - 8] : [attack - 5, attack - 10],
         damage: `${die ? `${dice}${die}${dmgMod ? (dmgMod > 0 ? '+' : '') + dmgMod : ''}` : Math.max(1, dice + dmgMod)} ${dmgType}`.trim()
-          + Object.entries(extras).map(([t, v]) => ` + ${v} ${t}`).join(''),
+          + Object.entries(extras).map(([t, v]) => ` + ${v} ${t}`).join('') + runeDice.join(''),
+        runes: runeTags, runeNotes, material: item && item.material && item.material.type ? item.material : null,
         persistent, splash: splashBase ? splashBase + splashBonus : 0, range: rec.range || null, mods: s.used, notes, dmgNotes: dm.notes.filter((n) => !n.category), dmgParts,
       };
     });

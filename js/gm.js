@@ -10,6 +10,7 @@ import { openCreatureEditor, blankCreature } from './creature-editor.js';
 import { loadCompanionData, companionSummary } from './companion-ui.js';
 import { limitedList, innateList, innateGroups, dailyList, consumables, freqText, alchemyInfo } from './uses.js';
 import { portraitSrc } from './portrait.js';
+import { loadRunes } from './runes.js';
 
 (async () => {
 const $ = (s, r = document) => r.querySelector(s);
@@ -18,6 +19,7 @@ const main = $('#main');
 
 const db = await new DB({ base: 'data/' }).init();
 await db.load(['equipment', 'creatures', 'creatureBooks', 'conditions']);
+await loadRunes(db);
 const engine = new Engine(db);
 const store = await new Store().init();
 mountAccount(store);

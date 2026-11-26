@@ -1402,3 +1402,24 @@ html[data-theme="light"] .gm-enc-top .gm-enc-name:hover, html[data-theme="light"
 .attr-tag { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; color: var(--warn); background: var(--warn-soft); vertical-align: 1px; }
 .attr-note { margin: 0 0 12px; }
 .attr-pick .chip-btn.on .muted, .attr-pick .chip-btn.on .attr-dflt { color: inherit; opacity: .85; }
+
+/* ============================================================ runes: badges, strike lines, the Runes window */
+.badge.rune-badge { background: rgba(167, 139, 250, .14); color: #c4b5fd; border: 1px solid rgba(167, 139, 250, .35); }
+.badge.mat-badge { background: rgba(148, 163, 184, .14); color: var(--ink2, #cbd5e1); border: 1px solid rgba(148, 163, 184, .35); }
+html[data-theme="light"] .badge.rune-badge { color: #6d28d9; background: rgba(124, 58, 237, .08); }
+.badge.rune-badge[role="button"] { cursor: pointer; }
+.s-runes { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+.s-rune-notes { display: flex; flex-direction: column; gap: 2px; }
+.rune-sec { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.rune-sec:first-child { padding-top: 0; }
+.rune-sec h3.inv-h { margin: 0 0 8px; }
+.rune-sec h3 .muted { font-weight: 500; margin-left: 6px; }
+.rune-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 0; }
+.rune-lbl { width: 72px; font-size: 13px; color: var(--muted); }
+.rune-seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.rune-seg .chip-btn { min-height: 38px; }
+.rune-list { display: flex; flex-direction: column; gap: 6px; }
+.rune-row { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 2px 6px 2px 10px; border: 1px solid var(--line); border-radius: 10px; background: rgba(var(--ov), .025); }
+.rune-row.off { opacity: .55; }
+.rune-mat select { min-height: 40px; }
+.dr-sub label.check { gap: 6px; align-items: center; margin-left: 4px; } .dr-sub label.check input { width: 18px; height: 18px; accent-color: var(--accent); }

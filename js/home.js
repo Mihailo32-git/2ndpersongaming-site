@@ -84,9 +84,9 @@ let pbTools = null;
 async function pathbuilderTools() {
   // Loaded only when needed: the game data is large and the home page doesn't use it otherwise.
   if (!pbTools) {
-    const [{ DB }, { Engine }, pb] = await Promise.all([import('./data.js'), import('./engine.js'), import('./pathbuilder.js')]);
+    const [{ DB }, { Engine }, pb, { loadRunes }] = await Promise.all([import('./data.js'), import('./engine.js'), import('./pathbuilder.js'), import('./runes.js')]);
     const db = await new DB({ base: 'data/' }).init();
-    await db.load(['equipment']);
+    await Promise.all([db.load(['equipment']), loadRunes(db)]);
     pbTools = { db, engine: new Engine(db), pb };
   }
   return pbTools;
