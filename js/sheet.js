@@ -12,7 +12,7 @@ import { slotRows, ordinal, spellList, isCantrip, attrLabel } from './casting.js
 import { openSpellPicker, rarityBadge } from './pickers.js';
 import { openDrawer } from './drawer.js';
 import { renderCompanions } from './companion-ui.js';
-import { parseFreq, freqText, limitedList, RESET_TIERS } from './uses.js';
+import { parseFreq, freqText, limitedList, RESET_TIERS, hasAlchemy, alchemyInfo, isAlchemyCraft, formulaFamily } from './uses.js';
 import { portraitSrc, pickImage, makePortrait } from './portrait.js';
 
 // Wrapped in an async function instead of top-level await so older tablet browsers (Chrome 80+) can run it.
@@ -53,8 +53,9 @@ if (!readOnly && charRec.id && store.conflictFor(charRec.id)) {
 }
 const build = normalizeBuild(charRec.build);
 const state = Object.assign({ hp: null, temp: 0, hero: 1, focus: null, dying: 0, wounded: 0, conditions: [], effects: [], raging: false, shieldRaised: false,
-  used: {}, prep: {}, innateUsed: {}, dailyUsed: {}, notes: '', companions: {}, freqUsed: {}, situational: {}, favEffects: [] }, charRec.state || {});
-for (const k of ['used', 'prep', 'innateUsed', 'dailyUsed', 'companions', 'freqUsed', 'situational']) state[k] = state[k] || {};
+  used: {}, prep: {}, innateUsed: {}, dailyUsed: {}, notes: '', companions: {}, freqUsed: {}, situational: {}, favEffects: [], alchemy: {} }, charRec.state || {});
+for (const k of ['used', 'prep', 'innateUsed', 'dailyUsed', 'companions', 'freqUsed', 'situational', 'alchemy']) state[k] = state[k] || {};
+state.alchemy.prep = state.alchemy.prep || {};
 if (!Array.isArray(state.favEffects)) state.favEffects = [];
 if (state.effects.length || state.favEffects.length) await db.load(['spell-effects', 'feat-effects', 'equipment-effects']);
 let ch = null;
@@ -320,6 +321,7 @@ function render() {
 function TABS() {
   return [
     { id: 'actions', label: 'Actions' },
+    ...(hasAlchemy(ch) ? [{ id: 'alchemy', label: 'Alchemy' }] : []),
     ...(ch.spellcasting.any ? [{ id: 'spells', label: 'Spells' }] : []),
     { id: 'feats', label: 'Feats' },
     { id: 'equipment', label: 'Equipment' },
@@ -373,7 +375,7 @@ function actionGroups() {
 
 TAB_RENDER.actions = (el) => {
   el.innerHTML = `<h3 class="sub-head">Strikes</h3>${ch.strikes.map((s) => `
-    <div class="strike"><div class="s-name" ${s.rec._pack ? `data-show="${esc(refOf(s.rec))}" role="button"` : ''}><b>${esc(s.name)}${s.item && s.item.qty > 1 ? ` <span class="muted small">×${s.item.qty}</span>` : ''}</b>
+    <div class="strike"><div class="s-name" ${s.rec._pack ? `data-show="${esc(refOf(s.rec))}" role="button"` : ''}><b>${esc(s.name)}${s.item && s.item.qty > 1 ? ` <span class="muted small">×${s.item.qty}</span>` : ''}</b>${s.item && s.item.left != null ? ` <span class="badge ${s.item.left ? '' : 'warn'}">${s.item.left} left${s.item.infused ? ' · infused' : ''}</span>` : ''}
       <div class="s-traits">${esc([s.ranged ? 'Ranged' + (s.range ? ' ' + s.range + ' ft' : '') : 'Melee', ...s.traits.filter((t) => t !== 'consumable').map(titleCase)].join(' · '))}</div></div>
       <div class="atk" aria-label="Attack bonuses"><span>${signed(s.attack)}</span><span>${signed(s.map[0])}</span><span>${signed(s.map[1])}</span></div>
       <div class="dmg">${esc(s.damage)}${s.splash ? `<div class="tiny muted">${s.splash} splash</div>` : ''}</div>
@@ -881,7 +883,8 @@ function craftSources() {
 TAB_RENDER.crafting = (el) => {
   const formulas = (build.formulas || []).map((r) => db.get(r)).filter(Boolean);
   el.innerHTML = `<div class="grid2"><div><div class="row between"><h3 class="sub-head" style="margin:0">Crafting</h3><span>Crafting <b class="mono">${signed(ch.skills.crafting.total)}</b> ${rankBadge(ch.ranks.skills.crafting)}</span></div>
-      ${ch.crafting.map((c) => { const used = state.dailyUsed[c.slug] || 0; return `<div class="entry"><div class="grow"><b>${esc(c.label)}</b> <span class="muted small">${esc(c.source)}</span>${c.max != null ? `<div class="sub">${c.daily ? 'Daily items' : 'Uses'}: ${c.max - used} of ${c.max} left</div>` : ''}</div>
+      ${hasAlchemy(ch) ? `<p class="small">Versatile vials, Advanced Alchemy and Quick Alchemy are on the <button type="button" class="linkish" data-goto="alchemy">Alchemy tab</button>.</p>` : ''}
+      ${ch.crafting.filter((c) => !isAlchemyCraft(c)).map((c) => { const used = state.dailyUsed[c.slug] || 0; return `<div class="entry"><div class="grow"><b>${esc(c.label)}</b> <span class="muted small">${esc(c.source)}</span>${c.max != null ? `<div class="sub">${c.daily ? 'Daily items' : 'Uses'}: ${c.max - used} of ${c.max} left</div>` : ''}</div>
         ${c.max != null && !readOnly ? `<button type="button" class="btn small" data-daily="${esc(c.slug)}" data-max="${c.max}">Use one</button>` : ''}</div>`; }).join('')}
       <p class="small muted">${ch.ranks.skills.crafting ? '' : 'You need to be trained in Crafting to Craft items.'}</p>
       <button type="button" class="btn primary" id="craftList" ${ch.ranks.skills.crafting ? '' : 'disabled'}>What can I craft?</button></div>
@@ -893,7 +896,124 @@ TAB_RENDER.crafting = (el) => {
   }));
   const cl = $('#craftList', el);
   if (cl) cl.onclick = openCraftList;
+  $$('[data-goto]', el).forEach((b) => (b.onclick = () => { tab = b.dataset.goto; sessionStorage.setItem('pf2e.sheetTab', tab); render(); }));
 };
+// ------------------------------------------------------------------ alchemy
+// Left: versatile vials and formulas (Quick Alchemy spends a vial). Right: Advanced Alchemy slots, picked at daily preparations.
+const ALCH_FILTER = ['item:trait:alchemical', 'item:trait:consumable'];
+const alchPool = (filter) => db.list('equipment').filter((r) => r.level <= ch.level && r.type !== 'treasure' && test(filter || ALCH_FILTER, itemOptions(r, 'equipment')));
+const knownFamilies = () => new Set((build.formulas || []).map((r) => db.get(r)).filter(Boolean).map((r) => formulaFamily(r.name)));
+const ALCH_KINDS = [['bomb', 'Bombs'], ['elixir', 'Elixirs'], ['mutagen', 'Mutagens'], ['poison', 'Poisons']];
+const alchKind = (r) => (ALCH_KINDS.find(([t]) => (r.traits || []).includes(t)) || [null, 'Other'])[1];
+const alchChips = () => [{ id: 'all', label: 'All' }, ...ALCH_KINDS.map(([t, label]) => ({ id: t, label, test: (it) => (it.rec.traits || []).includes(t) })), { id: 'other', label: 'Other', test: (it) => alchKind(it.rec) === 'Other' }];
+
+TAB_RENDER.alchemy = (el) => {
+  const info = alchemyInfo(ch, state);
+  const v = info.vials;
+  const fams = knownFamilies();
+  const best = new Map();
+  for (const r of alchPool(info.quick?.filter)) { const f = formulaFamily(r.name); if (!fams.has(f)) continue; const b = best.get(f); if (!b || r.level > b.level) best.set(f, r); }
+  const rows = [...best.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const canQuick = !!(info.quick && v && !readOnly);
+  const vialStrike = ch.strikes.find((x) => x.rec.slug === 'versatile-vial');
+  el.innerHTML = `<div class="alch-grid">
+    <section class="alch-col">
+      ${v ? `<div class="alch-card">
+        <div class="row between"><h3 class="sub-head">${esc(v.label)}</h3><span class="vial-num"><b>${v.left}</b> / ${v.max}</span></div>
+        <div class="vial-pips" role="group" aria-label="${esc(v.label)}">${Array.from({ length: v.max }, (_, i) => `<button type="button" class="vial ${i < v.left ? 'on' : ''}" data-vial="${i}" aria-label="Vial ${i + 1}: ${i < v.left ? 'ready' : 'used'}" ${readOnly ? 'disabled' : ''}></button>`).join('')}</div>
+        ${readOnly ? '' : `<div class="row alch-btns"><button type="button" class="btn small" data-vuse ${v.left ? '' : 'disabled'}>Use a vial</button><button type="button" class="btn small" data-vgain ${v.left < v.max ? '' : 'disabled'} title="Every 10 minutes in exploration mode you get 2 vials back">+2 · 10 min exploring</button></div>`}
+        ${vialStrike ? `<p class="small muted alch-note">As a bomb: <b class="mono">${signed(vialStrike.attack)}</b> to hit · ${esc(vialStrike.damage)} · ${vialStrike.splash} splash (also in Strikes). They refill at Rest.</p>` : ''}
+      </div>` : ''}
+      <div class="alch-card">
+        <div class="row between"><h3 class="sub-head">Formulas <span class="muted">${rows.length}</span></h3>${readOnly ? '' : '<button type="button" class="btn small" data-addformula>+ Add formula</button>'}</div>
+        ${canQuick ? '<p class="small muted alch-note">Quick Alchemy: spend a vial to make one now; it lasts until the start of your next turn.</p>' : ''}
+        ${rows.length > 6 ? '<input type="search" class="alch-search" placeholder="Search formulas…" aria-label="Search formulas">' : ''}
+        <div class="alch-list">${rows.map((r) => `<div class="alch-row" data-n="${esc(r.name.toLowerCase())}"><button type="button" class="alch-name" data-show="${esc(refOf(r))}">${esc(r.name)}</button><span class="muted small">Lv ${r.level}</span>${canQuick ? `<button type="button" class="btn small" data-quick="${esc(refOf(r))}" ${v.left ? '' : 'disabled'}>Quick</button>` : ''}</div>`).join('')
+          || `<p class="muted small">No alchemical formulas yet.${readOnly ? '' : ' Add the ones in your formula book; one formula covers every level of an item.'}</p>`}</div>
+      </div>
+    </section>
+    <section class="alch-col">
+      ${info.preps.map((p) => `<div class="alch-card">
+        <div class="row between"><h3 class="sub-head">${esc(p.label)}</h3><span class="small"><b>${p.left}</b> of ${p.max} left</span></div>
+        <p class="small muted alch-note">Up to ${p.max} items from your formulas, made each morning. Rest makes the same picks ready again.</p>
+        <div class="pslots">${p.slots.map((x, i) => { const r = x && db.get(x.ref); return r
+          ? `<div class="pslot ${x.used ? 'used' : ''}"><button type="button" class="alch-name" data-show="${esc(x.ref)}">${esc(r.name)}</button><span class="muted small">Lv ${r.level}</span>${readOnly ? '' : `<button type="button" class="btn small ${x.used ? '' : 'primary'}" data-puse="${i}" data-ps="${esc(p.slug)}">${x.used ? 'Undo' : 'Use'}</button><button type="button" class="icon-btn" data-pedit="${i}" data-ps="${esc(p.slug)}" aria-label="Change ${esc(r.name)}">✎</button>`}</div>`
+          : `<button type="button" class="pslot empty" data-pfill="${i}" data-ps="${esc(p.slug)}" ${readOnly ? 'disabled' : ''}>+ Choose an item</button>`; }).join('')}</div>
+        ${readOnly ? '' : `<div class="row alch-btns">${p.filled < p.max ? `<button type="button" class="btn primary" data-pfill="-1" data-ps="${esc(p.slug)}">Fill ${p.max - p.filled} empty slot${p.max - p.filled > 1 ? 's' : ''}</button>` : ''}${p.filled ? `<button type="button" class="btn ghost small" data-pclear="${esc(p.slug)}">Clear all</button>` : ''}</div>`}
+      </div>`).join('') || `<div class="alch-card"><h3 class="sub-head">Daily preparations</h3><p class="muted small">Advanced Alchemy comes with the alchemist class. Until then, make items with Quick Alchemy.</p></div>`}
+    </section></div>`;
+  if (readOnly) return;
+  const al = state.alchemy;
+  const setLeft = (n) => { al.vialsUsed = v.max - Math.max(0, Math.min(v.max, n)); change(); };
+  $$('[data-vial]', el).forEach((b) => (b.onclick = () => { const i = Number(b.dataset.vial); setLeft(i < v.left ? i : i + 1); }));
+  const vu = $('[data-vuse]', el); if (vu) vu.onclick = () => setLeft(v.left - 1);
+  const vg = $('[data-vgain]', el); if (vg) vg.onclick = () => setLeft(v.left + 2);
+  $$('[data-quick]', el).forEach((b) => (b.onclick = () => { const r = db.get(b.dataset.quick); setLeft(v.left - 1); toast(`Quick Alchemy: ${r ? r.name : 'item'} made (1 vial). It lasts until the start of your next turn.`, 'ok'); }));
+  const search = $('.alch-search', el);
+  if (search) search.oninput = () => { const q = search.value.trim().toLowerCase(); $$('.alch-row', el).forEach((r) => (r.hidden = !!q && !r.dataset.n.includes(q))); };
+  const slotsOf = (slug) => { const p = info.preps.find((x) => x.slug === slug); const arr = (al.prep[slug] = Array.isArray(al.prep[slug]) ? al.prep[slug] : []); arr.length = Math.max(arr.length, p.max); return { p, arr }; };
+  $$('[data-puse]', el).forEach((b) => (b.onclick = () => { const { arr } = slotsOf(b.dataset.ps); const x = arr[Number(b.dataset.puse)]; if (x) { x.used = !x.used; change(); } }));
+  $$('[data-pedit]', el).forEach((b) => (b.onclick = () => pickAlchemy(b.dataset.ps, Number(b.dataset.pedit), false)));
+  $$('[data-pfill]', el).forEach((b) => (b.onclick = () => pickAlchemy(b.dataset.ps, Number(b.dataset.pfill), true)));
+  $$('[data-pclear]', el).forEach((b) => (b.onclick = async () => { if (!(await confirmBox('Empty every slot?'))) return; al.prep[b.dataset.ps] = []; change(); }));
+  const af = $('[data-addformula]', el); if (af) af.onclick = addFormula;
+};
+
+/** Pick items for Advanced Alchemy slots. fill: keep going into the next empty slot until they are all full. */
+function pickAlchemy(slug, start, fill) {
+  const info = alchemyInfo(ch, state);
+  const p = info.preps.find((x) => x.slug === slug); if (!p) return;
+  const al = state.alchemy;
+  const arr = (al.prep[slug] = Array.isArray(al.prep[slug]) ? al.prep[slug] : []);
+  const empties = () => { const out = []; for (let i = 0; i < p.max; i++) if (!(arr[i] && arr[i].ref)) out.push(i); return out; };
+  let at = start >= 0 ? start : empties()[0];
+  if (at == null) return;
+  const fams = knownFamilies();
+  const items = alchPool(p.filter).filter((r) => fams.has(formulaFamily(r.name)) || r.rarity === 'common')
+    .map((r) => ({ key: refOf(r), name: r.name, level: r.level, rarity: r.rarity, rec: r, group: fams.has(formulaFamily(r.name)) ? 'Your formulas' : 'Not in your formula book (picking one adds it)', meta: alchKind(r) }))
+    .sort((a, b) => (a.group === b.group ? formulaFamily(a.name).localeCompare(formulaFamily(b.name)) || a.level - b.level : a.group === 'Your formulas' ? -1 : 1));
+  const sub = () => (fill ? `${empties().length} empty slot${empties().length === 1 ? '' : 's'} left` : `Slot ${at + 1} of ${p.max}`);
+  openDrawer({
+    title: p.label, subtitle: sub(), items, chips: alchChips(), instant: true, db, placeholder: 'Search items…', selected: fill ? null : arr[at]?.ref,
+    onPick: (it) => {
+      arr[at] = { ref: it.key, used: false };
+      if (!fams.has(formulaFamily(it.name))) { build.formulas = [...(build.formulas || []), it.key]; fams.add(formulaFamily(it.name)); saveBuild(); }
+      change();
+      if (!fill) return true;
+      const next = empties();
+      if (!next.length) { toast(`${p.label}: all ${p.max} slots filled.`, 'ok'); return true; }
+      at = next[0];
+      const d = [...document.querySelectorAll('.drawer')].pop(); const sl = d && d.querySelector('.dr-sub'); if (sl) sl.textContent = sub();
+      return false;
+    },
+  });
+}
+
+function addFormula() {
+  const fams = knownFamilies();
+  const seen = new Map();
+  for (const r of alchPool(alchemyInfo(ch, state).quick?.filter)) {
+    const f = formulaFamily(r.name); if (fams.has(f)) continue;
+    const b = seen.get(f); if (!b || r.level < b.level) seen.set(f, r);
+  }
+  const items = [...seen.values()].map((r) => ({ key: refOf(r), name: formulaFamily(r.name), level: r.level, rarity: r.rarity, rec: r, group: r.rarity === 'common' ? 'Common' : 'Uncommon and rare', meta: alchKind(r) }))
+    .sort((a, b) => (a.group === b.group ? a.name.localeCompare(b.name) : a.group === 'Common' ? -1 : 1));
+  let added = 0;
+  openDrawer({
+    title: 'Add formulas', subtitle: 'One formula covers every level of an item. Tap to add; the list stays open.', items, chips: alchChips(), instant: true, db, placeholder: 'Search formulas…',
+    onPick: (it) => {
+      build.formulas = [...(build.formulas || []), it.key]; added++;
+      saveBuild(); render();
+      it.disabled = true; it.badge = ' <span class="badge ok-badge">added</span>';
+      const d = [...document.querySelectorAll('.drawer')].pop();
+      const sl = d && d.querySelector('.dr-sub'); if (sl) sl.textContent = `${added} added. Tap more, or close the list when you're done.`;
+      const row = d && [...d.querySelectorAll('.dr-item')].find((x) => x.dataset.key === it.key);
+      if (row) { row.classList.add('disabled'); const t = row.querySelector('.t'); if (t) t.insertAdjacentHTML('afterend', it.badge); }
+      return false;
+    },
+  });
+}
+
 function openCraftList() {
   const m = modal('What can I craft?', { wide: true });
   const srcs = craftSources();
@@ -999,10 +1119,13 @@ function wire() {
     // Limited uses come back too, except weekly (and longer) ones.
     const keep = {}; for (const x of limitedList(ch, state)) if (x.tier > 4 && x.used) keep[x.slug] = x.used; state.freqUsed = keep;
     for (const e of Object.values(state.prep)) for (const p of Object.values(e)) if (p) p.cast = false;
+    // Alchemy: vials refill; Advanced Alchemy keeps yesterday's picks, ready to use again.
+    state.alchemy.vialsUsed = 0;
+    for (const arr of Object.values(state.alchemy.prep)) for (const x of Array.isArray(arr) ? arr : []) if (x) x.used = false;
     state.dying = 0; state.wounded = 0;
     state.conditions = state.conditions.filter((c) => !['frightened', 'off-guard', 'sickened', 'stunned', 'slowed', 'quickened', 'fatigued'].includes(c.slug));
     const d = state.conditions.find((c) => c.slug === 'drained'); if (d) { d.value -= 1; if (d.value <= 0) state.conditions = state.conditions.filter((c) => c !== d); }
-    toast('Rested: HP, slots and focus restored. Prepared spells stay — change them on the Spells tab.', 'ok');
+    toast(hasAlchemy(ch) ? 'Rested: HP, vials and focus restored. Your alchemy picks are ready again; change them on the Alchemy tab.' : 'Rested: HP, slots and focus restored. Prepared spells stay — change them on the Spells tab.', 'ok');
     change();
   };
   $$('[data-cup]', main).forEach((b) => (b.onclick = () => { state.conditions[Number(b.dataset.cup)].value++; change(); }));

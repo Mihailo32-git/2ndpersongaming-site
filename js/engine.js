@@ -690,6 +690,7 @@ export class Engine {
     ch.focusMax = 0;
     ch.ancestryHp = null;
     ch.familiarAbilities = 0; // abilities a familiar gets each day (Enhanced Familiar, witch's familiar…)
+    const resMods = [];
     for (const { r, inst } of aels) {
       const path = this._subst(r.path || '', ch, inst);
       if (/^system\.skills\./.test(path)) continue;
@@ -715,6 +716,7 @@ export class Engine {
       else if ((m = path.match(/^system\.proficiencies\.classDCs\.([\w-]+)\.rank$/)) && m[1] === classSlug) R.classDC = up(R.classDC);
       else if (path === 'system.resources.focus.max') ch.focusMax = up(ch.focusMax);
       else if (path === 'system.attributes.familiarAbilities.value') ch.familiarAbilities = up(ch.familiarAbilities);
+      else if ((m = path.match(/^system\.resources\.(\w+)\.max$/))) resMods.push({ key: m[1], up });
       // Heritages that change the ancestry's Hit Points (Sturdy Skeleton, Great Kholo: 10 instead of 6/8).
       else if (path === 'system.attributes.ancestryhp') ch.ancestryHp = up(ch.ancestryHp ?? ch.ancestry?.hp ?? 0);
       else if ((m = path.match(/^system\.details\.ancestry\.(adopted|versatile)$/))) { const v = this._subst(val, ch, inst); if (typeof v === 'string' && !v.includes('{')) ch.options.add(`actor-detail:${m[1]}:${v}`); }
@@ -725,6 +727,18 @@ export class Engine {
       }
     }
     ch.focusMax = Math.max(0, Math.min(3, ch.focusMax));
+    // Special resources: pools with a maximum such as versatile vials (alchemist, Alchemist Dedication, investigators).
+    ch.resources = {};
+    for (const { r, inst } of ch.rules.filter((x) => x.r.key === 'SpecialResource')) {
+      if (!r.slug || (r.predicate && !test(this._subst(r.predicate, ch, inst), ch.options))) continue;
+      const ev = (v) => (typeof v === 'number' ? v : this._value(ch, inst, String(v).replace(/@actor\.system\.abilities/g, '@actor.abilities')));
+      const max = Math.max(0, Number(ev(r.max ?? 0)) || 0);
+      const key = camelCase(r.slug);
+      const label = r.label && !/^PF2E\./.test(r.label) ? r.label : titleCase(r.slug.replace(/-/g, ' '));
+      const prev = ch.resources[key];
+      if (!prev || max > prev.max) ch.resources[key] = { slug: r.slug, key, label, max, itemLevel: r.level != null ? Number(ev(r.level)) || 1 : null, source: inst.rec.name };
+    }
+    for (const { key, up } of resMods) if (ch.resources[key]) ch.resources[key].max = Math.max(0, up(ch.resources[key].max));
     // Roll options for ranks (used by predicates on the second pass).
     for (const [s, r] of Object.entries(R.skills)) ch.options.add(`skill:${s}:rank:${r}`);
     for (const [d, r] of Object.entries(R.defenses)) ch.options.add(`defense:${d}:rank:${r}`);
@@ -986,6 +1000,21 @@ export class Engine {
       : (feats.has('weapon-specialization') || feats.has('psychic-weapon-specialization')) ? [0, 0, 2, 3, 4] : [0, 0, 0, 0, 0];
     const weapons = [];
     for (const it of inv) if (it.rec.type === 'weapon' && (it.equipped || (it.rec.traits || []).includes('bomb'))) weapons.push({ rec: it.rec, item: it });
+    // Versatile vials thrown as bombs, and bombs made with Advanced Alchemy this morning.
+    const al = state.alchemy || {};
+    const vials = ch.resources?.versatileVials;
+    const vialRec = vials && this.db.get('@equipment/versatile-vial');
+    if (vialRec) {
+      const il = vials.itemLevel || 1, n = il >= 18 ? 4 : il >= 12 ? 3 : il >= 4 ? 2 : 1;
+      weapons.push({ rec: { ...vialRec, damage: { ...vialRec.damage, dice: n }, splash: n, rules: [] }, source: vials.source,
+        item: { potency: n - 1, potencyLabel: 'Vial item bonus', left: Math.max(0, vials.max - (Number(al.vialsUsed) || 0)) } });
+    }
+    const infusedLeft = new Map();
+    for (const arr of Object.values(al.prep || {})) for (const x of Array.isArray(arr) ? arr : []) if (x && x.ref && !x.used) infusedLeft.set(x.ref, (infusedLeft.get(x.ref) || 0) + 1);
+    for (const [ref, n] of infusedLeft) {
+      const rec = this.db.get(ref);
+      if (rec && rec.type === 'weapon' && (rec.traits || []).includes('bomb')) weapons.push({ rec, item: { left: n, infused: true }, source: 'Advanced Alchemy' });
+    }
     weapons.push({ rec: { name: 'Fist', slug: 'fist', cat: 'unarmed', group: 'brawling', damage: { dice: 1, die: 'd4', type: 'bludgeoning' }, traits: ['agile', 'finesse', 'nonlethal', 'unarmed'] } });
     for (const { r, inst } of ch.rules.filter((x) => x.r.key === 'Strike')) {
       if (r.predicate && !test(this._subst(r.predicate, ch, inst), ch.options)) continue;
@@ -1043,7 +1072,8 @@ export class Engine {
       const am = this._mods(ch, ['attack', 'attack-roll', 'strike-attack-roll', rec.slug + '-attack', attr + '-based'], state, wOpts);
       const mods = [...am.mods, ...this._conditionMods(state.conditions || [])('attack', attr)];
       const notes = am.notes;
-      if (potency) mods.push({ label: 'Potency rune', value: potency, type: 'item' });
+      if (potency) mods.push({ label: item?.potencyLabel || 'Potency rune', value: potency, type: 'item' });
+      if (rec.bonusAtk) mods.push({ label: 'Item bonus', value: rec.bonusAtk, type: 'item' }); // alchemical bombs (+1 moderate, +2 greater…)
       const s = stackMods(mods);
       const attack = A[attr] + rankBonus(rank, L) + s.total;
       const agile = traits.includes('agile');

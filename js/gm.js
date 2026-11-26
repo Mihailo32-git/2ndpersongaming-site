@@ -8,7 +8,7 @@ import { signed, titleCase, uid } from './util.js';
 import { slotRows, ordinal } from './casting.js';
 import { openCreatureEditor, blankCreature } from './creature-editor.js';
 import { loadCompanionData, companionSummary } from './companion-ui.js';
-import { limitedList, innateList, innateGroups, dailyList, consumables, freqText } from './uses.js';
+import { limitedList, innateList, innateGroups, dailyList, consumables, freqText, alchemyInfo } from './uses.js';
 import { portraitSrc } from './portrait.js';
 
 (async () => {
@@ -378,6 +378,11 @@ function spentLine(p) {
     ? `<span title="${esc(g.source)} spells (once a day each) left today">✧ ${esc(g.source)} ${g.spells.filter((x) => !x.used).length}/${g.spells.length}</span>`
     : `<span class="gm-warn" title="${esc(g.source)}: spells not chosen yet (builder, Spells step)">✧ ${esc(g.source)} not chosen</span>`);
   for (const d of dailyList(p.ch, st)) parts.push(`<span title="${esc(d.label)}">⚗ ${d.left}/${d.max}</span>`);
+  const al = alchemyInfo(p.ch, st);
+  if (al.vials) parts.push(`<span title="${esc(al.vials.label)} left" class="${al.vials.left ? '' : 'gm-warn'}">⚗ ${al.vials.left}/${al.vials.max}</span>`);
+  for (const pr of al.preps) parts.push(pr.filled
+    ? `<span title="${esc(pr.label)}: infused items left today">✦ ${pr.left}/${pr.filled}</span>`
+    : `<span class="gm-warn" title="${esc(pr.label)}: nothing prepared today">✦ not prepared</span>`);
   const lim = limitedList(p.ch, st);
   if (lim.length) { const left = lim.reduce((a, x) => a + x.max - x.used, 0), tot = lim.reduce((a, x) => a + x.max, 0); parts.push(`<span title="Limited-use abilities left" class="${left < tot ? 'gm-warn' : ''}">⏱ ${left}/${tot}</span>`); }
   const cons = consumables(p.ch);
@@ -406,6 +411,17 @@ function partyHtml() {
   }).join('');
 }
 
+// Versatile vials left and the items made with Advanced Alchemy this morning (used ones greyed out).
+function alchemyHtml(ch, st) {
+  const al = alchemyInfo(ch, st || {});
+  let html = al.vials ? `<p class="small"><span class="muted">${esc(al.vials.label)}</span> <b>${al.vials.left}</b>/${al.vials.max} left</p>` : '';
+  for (const pr of al.preps) {
+    const by = new Map();
+    for (const x of pr.slots) if (x) { const g = by.get(x.ref) || { n: 0, left: 0 }; g.n++; if (!x.used) g.left++; by.set(x.ref, g); }
+    html += `<p class="small"><span class="muted">${esc(pr.label)} (infused today)</span><br>${[...by].map(([ref, g]) => { const r = db.get(ref); return `<span class="gm-slot ${g.left ? '' : 'out'}"><a class="ref" data-ref="${esc(ref.slice(1))}">${esc(r ? r.name : ref)}</a> <b>${g.left}</b>/${g.n}</span>`; }).join(' ') || '<span class="gm-warn">Nothing prepared today.</span>'}</p>`;
+  }
+  return html;
+}
 function openPc(p) {
   const ch = p.ch; const h = hpOf(p);
   const m = modal(p.build.name || 'Character', { wide: true });
@@ -424,9 +440,10 @@ function openPc(p) {
         <p class="small muted">Saves ${signed(ch.saves.fortitude.total)} / ${signed(ch.saves.reflex.total)} / ${signed(ch.saves.will.total)} · Perception ${signed(ch.perception.total)} · Speed ${ch.speed?.total ?? '—'} ft</p></div>
       <div><h3 class="inv-h">Resources</h3>
         <p class="small">Hero points <b>${p.state.hero || 0}</b>${fmax ? ` · Focus <b>${p.state.focus ?? fmax}/${fmax}</b>` : ''}</p>
-        ${res.map((e) => `<p class="small"><span class="muted">${esc(e.label)}</span><br>${Object.entries(e.ranks).map(([r, [l, t]]) => `<span class="gm-slot ${l ? '' : 'out'}">${ordinal(r)} <b>${l}</b>/${t}</span>`).join(' ')}</p>`).join('') || '<p class="muted small">No spell slots.</p>'}
+        ${res.map((e) => `<p class="small"><span class="muted">${esc(e.label)}</span><br>${Object.entries(e.ranks).map(([r, [l, t]]) => `<span class="gm-slot ${l ? '' : 'out'}">${ordinal(r)} <b>${l}</b>/${t}</span>`).join(' ')}</p>`).join('') || (ch.spellcasting?.any || !alchemyInfo(ch, p.state || {}).vials ? '<p class="muted small">No spell slots.</p>' : '')}
         ${innateGroups(ch, p.state).map((g) => `<p class="small"><span class="muted">${esc(g.source)} spells (once a day each)</span><br>${g.spells.map((x) => `<span class="gm-slot ${x.used ? 'out' : ''}" title="${x.used ? 'Used today' : 'Available'}">${x.rank ? ordinal(x.rank) + ' ' : ''}${esc(x.name)}</span>`).join(' ')}${g.unpicked.map((r) => ` <span class="gm-slot out" title="Not chosen yet: the player picks it in the builder (Spells step)">${ordinal(r)} not chosen</span>`).join('')}</p>`).join('')}
-        ${daily.map((d) => `<p class="small"><span class="muted">${esc(d.label)}</span> <b>${d.left}</b>/${d.max} left</p>`).join('')}</div>
+        ${daily.map((d) => `<p class="small"><span class="muted">${esc(d.label)}</span> <b>${d.left}</b>/${d.max} left</p>`).join('')}
+        ${alchemyHtml(ch, p.state)}</div>
     </div>
     ${lim.length || cons.total ? `<div class="gm-card-grid" style="margin-top:12px">
       ${lim.length ? `<div><h3 class="inv-h">Limited-use abilities</h3>${lim.map((x) => `<div class="gm-lim ${x.used >= x.max ? 'out' : ''}"><span>${x.ref ? `<a class="ref" data-ref="${esc(x.ref.slice(1))}">${esc(x.name)}</a>` : esc(x.name)} <span class="muted small">${esc(freqText(x))}</span></span><b>${x.used >= x.max ? 'used' : `${x.max - x.used}/${x.max}`}</b></div>`).join('')}</div>` : ''}

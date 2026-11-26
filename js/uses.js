@@ -59,10 +59,37 @@ export function innateGroups(ch, state) {
   for (const s of ch.spellcasting?.innate || []) if (s.pickFor && !s.rec) group(sourceLabel(s.source)).unpicked.push(s.rank);
   return out;
 }
-/** Daily resources (versatile vials, infused reagents…): [{label, max, left}] */
+/** Daily crafting resources other than alchemy (snares and the like): [{label, max, left}] */
 export function dailyList(ch, state) {
-  return (ch.crafting || []).filter((c) => c.max != null).map((c) => ({ label: c.label, max: c.max, left: Math.max(0, c.max - ((state.dailyUsed || {})[c.slug] || 0)) }));
+  return (ch.crafting || []).filter((c) => c.max != null && !isAlchemyCraft(c)).map((c) => ({ label: c.label, max: c.max, left: Math.max(0, c.max - ((state.dailyUsed || {})[c.slug] || 0)) }));
 }
+
+// ------------------------------------------------------------------ alchemy
+// Versatile vials (a pool that refills at daily preparations), Advanced Alchemy slots (items made each morning,
+// kept in state.alchemy.prep[slug] = [{ref, used}]) and Quick Alchemy (spend a vial for a formula item).
+const ALCH_SLUGS = ['advanced-alchemy', 'quick-alchemy'];
+export const isAlchemyCraft = (c) => ALCH_SLUGS.includes(c.slug) || (!!c.daily && JSON.stringify(c.filter || []).includes('item:trait:alchemical'));
+export const hasAlchemy = (ch) => !!ch.resources?.versatileVials || (ch.crafting || []).some(isAlchemyCraft);
+export function alchemyInfo(ch, state) {
+  const al = (state && state.alchemy) || {};
+  const v = ch.resources?.versatileVials;
+  const vials = v ? { label: v.label, max: v.max, left: Math.max(0, v.max - (Number(al.vialsUsed) || 0)) } : null;
+  const preps = (ch.crafting || []).filter((c) => c.daily && c.max != null && isAlchemyCraft(c)).map((c) => {
+    const arr = Array.isArray((al.prep || {})[c.slug]) ? al.prep[c.slug] : [];
+    const slots = Array.from({ length: Math.max(0, c.max) }, (_, i) => (arr[i] && arr[i].ref ? arr[i] : null));
+    return { slug: c.slug, label: c.label, max: c.max, filter: c.filter, slots, filled: slots.filter(Boolean).length, left: slots.filter((x) => x && !x.used).length };
+  });
+  const quick = (ch.crafting || []).find((c) => c.slug === 'quick-alchemy') || null;
+  return { vials, preps, quick };
+}
+/** Infused items still unused today, by ref: [{ref, n}] */
+export function infusedLeft(info) {
+  const m = new Map();
+  for (const p of info.preps) for (const x of p.slots) if (x && !x.used) m.set(x.ref, (m.get(x.ref) || 0) + 1);
+  return [...m].map(([ref, n]) => ({ ref, n }));
+}
+/** "Alchemist's Fire (Greater)" → "Alchemist's Fire": one formula makes every level of an item. */
+export const formulaFamily = (name) => String(name || '').replace(/\s*\((lesser|minor|moderate|greater|major|true)\)\s*$/i, '').trim();
 const POTION_CATS = ['potion', 'elixir', 'mutagen', 'poison', 'oil', 'drug'];
 const MAGIC_CATS = ['scroll', 'talisman', 'wand', 'fulu', 'catalyst'];
 const GROUPS = [['potion', 'Potions & elixirs'], ['magic', 'Scrolls, wands & talismans'], ['bomb', 'Bombs & snares'], ['ammo', 'Ammunition'], ['other', 'Other']];

@@ -1358,3 +1358,30 @@ html[data-theme="light"] .gm-enc-top .gm-enc-name:hover, html[data-theme="light"
 .gm-pc-pic { width: 56px; height: 70px; border-radius: 10px; border: 1px solid var(--line); }
 @media (max-width: 640px) { .portrait { width: 84px; height: 105px; flex-basis: 84px; } }
 @media print { .portrait { box-shadow: none; } .pic-plus { display: none; } }
+
+/* ============================================================ sheet: Alchemy tab (vials + formulas | Advanced Alchemy slots) */
+.alch-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+@media (min-width: 760px) { .alch-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: start; } }
+.alch-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.alch-card { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: rgba(var(--ov), .02); }
+.alch-card h3.sub-head, .col-main .alch-card h3.sub-head { margin: 0; }
+.alch-card .sub-head .muted { font-weight: 500; margin-left: 4px; }
+.alch-note { margin: 6px 0 10px; }
+.alch-btns { gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.vial-num { font-size: 14px; } .vial-num b { font-size: 20px; color: var(--accent); }
+.vial-pips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.vial { width: 30px; height: 38px; padding: 0; border-radius: 8px 8px 12px 12px; border: 2px solid var(--accent-line); background: transparent; cursor: pointer; position: relative; }
+.vial::before { content: ''; position: absolute; left: 50%; top: -6px; width: 12px; height: 6px; transform: translateX(-50%); border-radius: 3px 3px 0 0; background: var(--accent-line); }
+.vial.on { background: linear-gradient(180deg, rgba(var(--ov), .08) 0 30%, var(--accent) 30% 100%); border-color: var(--accent); }
+.vial:disabled { cursor: default; }
+@media (pointer: coarse) { .vial { width: 36px; height: 44px; } }
+.alch-search { width: 100%; margin-bottom: 8px; }
+.alch-list, .pslots { display: flex; flex-direction: column; gap: 6px; }
+.alch-row, .pslot { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 6px 4px 10px; border: 1px solid var(--line); border-radius: 10px; background: rgba(var(--ov), .025); }
+.alch-row[hidden] { display: none; }
+.alch-name { flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 6px 0; color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; overflow-wrap: anywhere; }
+.alch-name:hover { color: var(--accent); }
+.pslot.used { opacity: .55; } .pslot.used .alch-name { text-decoration: line-through; }
+.pslot.empty { justify-content: center; border-style: dashed; color: var(--muted); font: inherit; cursor: pointer; }
+.pslot.empty:hover { border-color: var(--accent-line); color: var(--accent); }
+.linkish { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
