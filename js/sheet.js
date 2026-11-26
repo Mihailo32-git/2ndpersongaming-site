@@ -179,21 +179,25 @@ function statInfo(key) {
 }
 function statModal(key) {
   const m = modal(statInfo(key).title);
+  let showPick = false; // the alternate ability score picker stays hidden until asked for
   const draw = () => {
     const { stat, isDC, label, value, skill } = statInfo(key);
     const notes = stat.notes || [];
     const alt = skill && stat.attr !== stat.defaultAttr;
     // House rule: another attribute for this skill, when the GM allows it.
     const attrPick = !skill ? '' : readOnly ? (alt ? `<p class="small attr-note">Uses <b>${esc(ATTR_NAMES[stat.attr])}</b> instead of ${esc(ATTR_NAMES[stat.defaultAttr])} (house rule).</p>` : '')
-      : `<div class="attr-pick-wrap"><div class="small"><b>Attribute</b> <span class="muted">normally ${esc(ATTR_NAMES[stat.defaultAttr])}; pick another only if your GM allows it</span></div>
-        <div class="attr-pick" role="radiogroup" aria-label="Attribute for ${esc(titleCase(key))}">${ATTRS.map((a) => `<button type="button" role="radio" aria-checked="${stat.attr === a}" class="chip-btn ${stat.attr === a ? 'on' : ''}" data-attr="${a}" title="${esc(ATTR_NAMES[a])}${a === stat.defaultAttr ? ' (normal)' : ''}">${a.toUpperCase()}${a === stat.defaultAttr ? '<span class="attr-dflt" aria-hidden="true">•</span>' : ''} <span class="muted">${signed(ch.attrs[a])}</span></button>`).join('')}</div></div>`;
-    m.body.innerHTML = `${attrPick}<table class="stat-table"><tr><td>${esc(label)}</td><td class="mod">${isDC ? value : signed(value)}</td></tr>
+      : !showPick ? `<button type="button" class="linkish small alt-attr-btn" data-altopen aria-expanded="false">Alternate ability score${alt ? `: ${esc(ATTR_NAMES[stat.attr])}` : ''}</button>`
+      : `<div class="attr-pick-wrap"><div class="small"><b>Alternate ability score</b> <span class="muted">normally ${esc(ATTR_NAMES[stat.defaultAttr])}; pick another only if your GM allows it</span></div>
+        <div class="attr-pick" role="radiogroup" aria-label="Ability score for ${esc(titleCase(key))}">${ATTRS.map((a) => `<button type="button" role="radio" aria-checked="${stat.attr === a}" class="chip-btn ${stat.attr === a ? 'on' : ''}" data-attr="${a}" title="${esc(ATTR_NAMES[a])}${a === stat.defaultAttr ? ' (normal)' : ''}">${a.toUpperCase()}${a === stat.defaultAttr ? '<span class="attr-dflt" aria-hidden="true">•</span>' : ''} <span class="muted">${signed(ch.attrs[a])}</span></button>`).join('')}</div></div>`;
+    m.body.innerHTML = `<table class="stat-table"><tr><td>${esc(label)}</td><td class="mod">${isDC ? value : signed(value)}</td></tr>
       ${(stat.mods || []).map((x) => `<tr class="${x.situational ? 'sit-mod' : ''}"><td>${esc(x.label)} <span class="muted small">${esc(x.type)}${x.situational ? ' · situational, on' : ''}</span></td><td class="mod">${signed(x.value)}</td></tr>`).join('')}
       <tr><th>Total</th><th class="mod">${isDC ? stat.total : signed(stat.total)}</th></tr></table>
       ${notes.length ? `<h4 style="margin-top:14px">Situational</h4>
         <p class="muted small" style="margin-top:0">${readOnly ? 'Ticked ones are on.' : 'Tick one while it applies: it counts until you untick it.'}</p>
         <div class="sit-list">${notes.map((n) => `<label class="sit-row ${n.on ? 'on' : ''}"><input type="checkbox" data-sit="${esc(n.id)}" ${n.on ? 'checked' : ''} ${readOnly ? 'disabled' : ''}>
-          <span><b class="mono">${signed(n.value)}</b> ${esc(n.type)} <span class="muted">from</span> ${esc(n.label)}${n.source && n.source !== n.label ? ` <span class="muted small">(${esc(n.source)})</span>` : ''}</span></label>`).join('')}</div>` : ''}`;
+          <span><b class="mono">${signed(n.value)}</b> ${esc(n.type)} <span class="muted">from</span> ${esc(n.label)}${n.source && n.source !== n.label ? ` <span class="muted small">(${esc(n.source)})</span>` : ''}</span></label>`).join('')}</div>` : ''}
+      ${attrPick}`;
+    const ao = $('[data-altopen]', m.body); if (ao) ao.onclick = () => { showPick = true; draw(); };
     $$('[data-attr]', m.body).forEach((b) => (b.onclick = () => {
       const a = b.dataset.attr;
       build.skillAttrs = Object.assign({}, build.skillAttrs);
