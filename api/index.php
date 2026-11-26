@@ -88,9 +88,9 @@ function db(): PDO {
     return $pdo;
 }
 
-/** Creates or upgrades the tables. Schema 2: character versions, password resets, attempt kinds. Schema 3: parties. Schema 4: saved encounters. */
+/** Creates or upgrades the tables. Schema 2: character versions, password resets, attempt kinds. Schema 3: parties. Schema 4: saved encounters. Schema 5: homebrew (GM's own creatures). */
 function ensureSchema(PDO $pdo): void {
-    $want = '4';
+    $want = '5';
     try {
         $v = $pdo->query("SELECT v FROM app_meta WHERE k = 'schema'")->fetchColumn();
         if ($v === $want) return;
@@ -108,6 +108,7 @@ function ensureSchema(PDO $pdo): void {
         "CREATE TABLE IF NOT EXISTS party_members (party_id INTEGER NOT NULL REFERENCES parties(id) ON DELETE CASCADE, character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE, joined_at TEXT NOT NULL, PRIMARY KEY (party_id, character_id))",
         "CREATE INDEX IF NOT EXISTS idx_member_char ON party_members(character_id)",
         "CREATE TABLE IF NOT EXISTS encounters (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, id TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', summary TEXT NOT NULL DEFAULT '', data TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (user_id, id))",
+        "CREATE TABLE IF NOT EXISTS homebrew (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, id TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'creature', name TEXT NOT NULL DEFAULT '', data TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (user_id, id))",
     ] : [
         "CREATE TABLE IF NOT EXISTS app_meta (k VARCHAR(40) NOT NULL PRIMARY KEY, v VARCHAR(255) NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
         "CREATE TABLE IF NOT EXISTS users (id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, email VARCHAR(190) NOT NULL UNIQUE, name VARCHAR(100) NOT NULL DEFAULT '', password_hash VARCHAR(255) NOT NULL, created_at DATETIME NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
@@ -117,6 +118,7 @@ function ensureSchema(PDO $pdo): void {
         "CREATE TABLE IF NOT EXISTS parties (id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, owner_id INT UNSIGNED NOT NULL, name VARCHAR(100) NOT NULL DEFAULT '', code CHAR(6) NOT NULL UNIQUE, locked TINYINT(1) NOT NULL DEFAULT 0, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, INDEX idx_party_owner (owner_id), CONSTRAINT fk_party_owner FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
         "CREATE TABLE IF NOT EXISTS party_members (party_id INT UNSIGNED NOT NULL, character_id INT UNSIGNED NOT NULL, joined_at DATETIME NOT NULL, PRIMARY KEY (party_id, character_id), INDEX idx_member_char (character_id), CONSTRAINT fk_pm_party FOREIGN KEY (party_id) REFERENCES parties(id) ON DELETE CASCADE, CONSTRAINT fk_pm_char FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
         "CREATE TABLE IF NOT EXISTS encounters (user_id INT UNSIGNED NOT NULL, id VARCHAR(40) NOT NULL, name VARCHAR(120) NOT NULL DEFAULT '', summary VARCHAR(255) NOT NULL DEFAULT '', data MEDIUMTEXT NOT NULL, version INT UNSIGNED NOT NULL DEFAULT 1, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, PRIMARY KEY (user_id, id), INDEX idx_enc_updated (user_id, updated_at), CONSTRAINT fk_enc_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        "CREATE TABLE IF NOT EXISTS homebrew (user_id INT UNSIGNED NOT NULL, id VARCHAR(40) NOT NULL, kind VARCHAR(20) NOT NULL DEFAULT 'creature', name VARCHAR(120) NOT NULL DEFAULT '', data MEDIUMTEXT NOT NULL, version INT UNSIGNED NOT NULL DEFAULT 1, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, PRIMARY KEY (user_id, id), CONSTRAINT fk_hb_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
     ];
     foreach ($ddl as $q) $pdo->exec($q);
     // Upgrades for databases made from the first schema.sql
@@ -409,6 +411,7 @@ switch ("$method $route") {
         db()->prepare('DELETE FROM party_members WHERE party_id IN (SELECT id FROM parties WHERE owner_id = ?)')->execute([$u['id']]);
         db()->prepare('DELETE FROM parties WHERE owner_id = ?')->execute([$u['id']]);
         db()->prepare('DELETE FROM encounters WHERE user_id = ?')->execute([$u['id']]);
+        db()->prepare('DELETE FROM homebrew WHERE user_id = ?')->execute([$u['id']]);
         db()->prepare('DELETE FROM characters WHERE user_id = ?')->execute([$u['id']]);
         db()->prepare('DELETE FROM password_resets WHERE user_id = ?')->execute([$u['id']]);
         db()->prepare('DELETE FROM users WHERE id = ?')->execute([$u['id']]);
@@ -629,6 +632,42 @@ switch ("$method $route") {
     case 'POST encounter_delete':
         $u = needUser();
         db()->prepare('DELETE FROM encounters WHERE user_id = ? AND id = ?')->execute([$u['id'], (string)(body()['id'] ?? '')]);
+        ok(['ok' => true]);
+
+    // ---------------------------------------------------------------- homebrew (the GM's own creatures)
+    case 'GET homebrew':
+        $u = needUser();
+        $st = db()->prepare('SELECT id, kind, name, data, version, updated_at FROM homebrew WHERE user_id = ? ORDER BY name');
+        $st->execute([$u['id']]);
+        ok(['items' => array_map(fn($h) => ['id' => $h['id'], 'kind' => $h['kind'], 'name' => $h['name'], 'version' => (int)$h['version'], 'updated' => iso($h['updated_at']), 'data' => json_decode($h['data'], true)], $st->fetchAll())]);
+
+    case 'POST homebrew_save':
+        $u = needUser();
+        $b = body();
+        $id = (string)($b['id'] ?? '');
+        if (!preg_match('/^[A-Za-z0-9_-]{6,40}$/', $id)) fail(400, 'Bad id');
+        $kind = in_array($b['kind'] ?? '', ['creature'], true) ? $b['kind'] : 'creature';
+        $data = json_encode($b['data'] ?? null, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if (!is_array($b['data'] ?? null) || strlen($data) > 200000) fail(400, 'Missing or too big');
+        $name = mb_substr(trim((string)($b['name'] ?? '')), 0, 120) ?: 'Unnamed';
+        $st = db()->prepare('SELECT version FROM homebrew WHERE user_id = ? AND id = ?');
+        $st->execute([$u['id'], $id]);
+        if ($st->fetchColumn() !== false) {
+            db()->prepare('UPDATE homebrew SET kind=?, name=?, data=?, version=version+1, updated_at=? WHERE user_id=? AND id=?')->execute([$kind, $name, $data, now(), $u['id'], $id]);
+        } else {
+            $st = db()->prepare('SELECT COUNT(*) FROM homebrew WHERE user_id = ?');
+            $st->execute([$u['id']]);
+            if ((int)$st->fetchColumn() >= 1000) fail(400, 'You can keep up to 1000 homebrew creatures');
+            db()->prepare('INSERT INTO homebrew (user_id, id, kind, name, data, version, created_at, updated_at) VALUES (?,?,?,?,?,1,?,?)')->execute([$u['id'], $id, $kind, $name, $data, now(), now()]);
+        }
+        $st = db()->prepare('SELECT version, updated_at FROM homebrew WHERE user_id = ? AND id = ?');
+        $st->execute([$u['id'], $id]);
+        $h = $st->fetch();
+        ok(['id' => $id, 'version' => (int)$h['version'], 'updated' => iso($h['updated_at'])]);
+
+    case 'POST homebrew_delete':
+        $u = needUser();
+        db()->prepare('DELETE FROM homebrew WHERE user_id = ? AND id = ?')->execute([$u['id'], (string)(body()['id'] ?? '')]);
         ok(['ok' => true]);
 
     default:

@@ -6,6 +6,8 @@ import { mountAccount } from './account.js';
 import { modal, toast, confirmBox, wireRefs, traitChips, esc } from './ui.js';
 import { signed, titleCase, uid } from './util.js';
 import { slotRows, ordinal } from './casting.js';
+import { openCreatureEditor, blankCreature } from './creature-editor.js';
+import { loadCompanionData, companionSummary } from './companion-ui.js';
 
 (async () => {
 const $ = (s, r = document) => r.querySelector(s);
@@ -173,8 +175,75 @@ async function initEncounters() {
   if (store.user && Object.values(cache.items).some((it) => it.dirty)) push();
 }
 
+// ------------------------------------------------------------------ homebrew creatures
+// The GM's own creatures, in the same statblock format as the bestiary. Slug "hb:" + id.
+// Kept on this device and, logged in, in the account (sent a moment after a change).
+const hbKey = (u) => 'pf2e.gm.hb.' + (u ? 'u' + u.id : 'anon');
+const hb = readJson(hbKey(store.user)) || { items: {} };
+const hbPersist = () => writeJson(hbKey(store.user), hb);
+if (store.user) {
+  const anon = readJson(hbKey(null));
+  if (anon && Object.keys(anon.items || {}).length) {
+    for (const [id, it] of Object.entries(anon.items)) if (!it.deleted && it.data) hb.items[id] = { data: it.data, version: 0, dirty: Date.now() };
+    try { localStorage.removeItem(hbKey(null)); } catch (e) { /* ignore */ }
+    hbPersist();
+  }
+}
+const HB = 'hb:';
+const isHb = (slug) => String(slug).startsWith(HB);
+const hbIndexOf = (id, d) => ({ slug: HB + id, name: d.name, level: d.level, traits: d.traits || [], rarity: d.rarity || 'common', size: d.size || 'med', hp: d.hp, ac: d.ac, per: d.perception, book: 'mine' });
+const hbList = () => Object.entries(hb.items).filter(([, it]) => !it.deleted && it.data).map(([id, it]) => hbIndexOf(id, it.data));
+function crIndex(slug) {
+  if (!isHb(slug)) return db.get('@creatures/' + slug);
+  const it = hb.items[slug.slice(HB.length)];
+  return it && !it.deleted && it.data ? hbIndexOf(slug.slice(HB.length), it.data) : null;
+}
+async function hbPull() {
+  if (!store.user) return;
+  try {
+    const items = (await api('homebrew')).items || [];
+    const ids = new Set(items.map((x) => x.id));
+    for (const x of items) { const it = hb.items[x.id]; if (!it || (!it.dirty && (it.version || 0) < x.version)) hb.items[x.id] = { data: x.data, version: x.version, dirty: 0 }; }
+    for (const [id, it] of Object.entries(hb.items)) if (it.version && !it.dirty && !ids.has(id)) delete hb.items[id];
+    hbPersist();
+  } catch (e) { /* offline: use the copies on this device */ }
+}
+let hbTimer = null; let hbPushing = false;
+async function hbPush() {
+  if (!store.user || hbPushing) return;
+  hbPushing = true;
+  try {
+    for (const [id, it] of Object.entries(hb.items)) {
+      if (!it.dirty) continue;
+      const stamp = it.dirty;
+      if (it.deleted) { if (it.version) await api('homebrew_delete', { id }); if (it.dirty === stamp) delete hb.items[id]; }
+      else { const r = await api('homebrew_save', { id, kind: 'creature', name: it.data.name, data: it.data }); it.version = r.version; if (it.dirty === stamp) it.dirty = 0; }
+      hbPersist();
+    }
+  } catch (e) { clearTimeout(hbTimer); hbTimer = setTimeout(hbPush, 30000); }
+  finally { hbPushing = false; }
+}
+function hbSave(id, data) {
+  const old = hb.items[id];
+  hb.items[id] = { data, version: old?.version || 0, dirty: Date.now() + Math.random() };
+  hbPersist();
+  if (store.user) { clearTimeout(hbTimer); hbTimer = setTimeout(hbPush, 300); }
+}
+function hbDelete(id) {
+  const it = hb.items[id];
+  if (store.user && it?.version) hb.items[id] = { deleted: true, version: it.version, dirty: Date.now() };
+  else delete hb.items[id];
+  hbPersist();
+  if (store.user) hbPush();
+}
+window.addEventListener('online', () => { if (store.user) hbPush(); });
+
 const statblocks = {};
 async function statblock(slug) {
+  if (isHb(slug)) {
+    const it = hb.items[slug.slice(HB.length)];
+    return it && !it.deleted && it.data ? Object.assign({ src: 'My creatures' }, it.data, { slug }) : null;
+  }
   if (!statblocks[slug]) {
     const n = db.meta?.textBuckets?.creatures || 16;
     const m = await db.fetchJson('text/creatures/' + bucketOf(slug, n) + '.json').catch(() => ({}));
@@ -292,6 +361,13 @@ function partyColumn() {
     <div class="gm-live ${live === false ? 'off' : ''}">${live === false ? 'Can’t reach the server: retrying…' : '● Live'}</div>
     ${partyHtml()}`;
 }
+// Party members' companions (animal companions, familiars, eidolons): loaded the first time someone has one.
+let compData = null;
+const compLines = (p) => {
+  if (!(p.build.companions || []).length) return [];
+  if (!compData) { loadCompanionData(db).then((d) => { compData = d; renderParty(); }); return []; }
+  return companionSummary(p.build, p.state, p.ch, compData);
+};
 function partyHtml() {
   if (!party.length) return store.user && activeParty ? '<p class="muted small">Nobody has joined yet. Share the join code: players tap <b>Party</b> on their sheet and enter it.</p>' : '<p class="muted small">No characters yet.</p>';
   return party.map((p, i) => {
@@ -306,6 +382,7 @@ function partyHtml() {
       <div class="gm-mini">${['fortitude', 'reflex', 'will'].map((s) => `<span>${s[0].toUpperCase()}<b>${signed(ch.saves[s].total)}</b></span>`).join('')}<span>Per<b>${signed(ch.perception.total)}</b></span></div>
       <div class="gm-res">${p.state.hero ? `<span title="Hero points">★ ${p.state.hero}</span>` : ''}${fmax ? `<span title="Focus points">◆ ${p.state.focus ?? fmax}/${fmax}</span>` : ''}${slotsLeft(p).slice(0, 1).map((e) => Object.entries(e.ranks).slice(-3).map(([r, [l, t]]) => `<span title="${esc(e.label)}: ${ordinal(r)} rank">${ordinal(r)} ${l}/${t}</span>`).join('')).join('')}</div>
       ${p.state.conditions?.length ? `<div class="gm-conds">${condChips(p.state.conditions)}</div>` : ''}
+      ${compLines(p).filter((c) => !c.shared).map((c) => `<div class="gm-comp"><span>${c.kind === 'familiar' ? '✦' : '🐾'} ${esc(c.name)}</span><span class="mono"><b>${c.cur}</b>/${c.max}${c.temp ? ` <span class="gm-temp">+${c.temp}</span>` : ''} · AC ${c.ac}</span></div>`).join('')}
     </button>`;
   }).join('');
 }
@@ -376,7 +453,7 @@ async function removeCreature(c) {
   save(); render();
 }
 function setAdj(c, adj) {
-  const base = db.get('@creatures/' + c.slug);
+  const base = crIndex(c.slug);
   const lost = c.max - c.hp;
   c.adj = adj;
   c.max = Math.max(1, (base?.hp || c.max) + adjHp(c.level, adj));
@@ -388,7 +465,7 @@ function setAdj(c, adj) {
 // The order is a list of keys: a creature's id, or "pc:" + the character's id.
 const d20 = () => { const a = new Uint32Array(1); (window.crypto || window.msCrypto).getRandomValues(a); return 1 + (a[0] % 20); };
 const pcKey = (p) => 'pc:' + p.rec.id;
-const crPer = (c) => (c.per ?? db.get('@creatures/' + c.slug)?.per ?? 0) + adjMod(c.adj);
+const crPer = (c) => (c.per ?? crIndex(c.slug)?.per ?? 0) + adjMod(c.adj);
 function who(key) {
   if (String(key).startsWith('pc:')) {
     const p = party.find((x) => pcKey(x) === key);
@@ -672,7 +749,7 @@ function statblockHtml(sb, c, preview = false) {
   const saves = sb.saves || { fortitude: 0, reflex: 0, will: 0 };
   return `
     <div class="sb-head"><h2>${esc(sb.name)}${c.tag ? ` <span class="gm-tag">${esc(c.tag)}</span>` : ''}</h2><span class="sb-type">Creature ${lvl}</span></div>
-    ${preview ? '' : `<div class="sb-adj" role="group" aria-label="Adjustment">${['weak', 'normal', 'elite'].map((a) => `<button type="button" class="chip-btn ${c.adj === a ? 'on' : ''}" data-adj="${a}">${titleCase(a)}</button>`).join('')}<span class="spacer"></span><button type="button" class="btn small ghost sb-remove" data-remove>✕ Remove</button></div>`}
+    ${preview ? '' : `<div class="sb-adj" role="group" aria-label="Adjustment">${['weak', 'normal', 'elite'].map((a) => `<button type="button" class="chip-btn ${c.adj === a ? 'on' : ''}" data-adj="${a}">${titleCase(a)}</button>`).join('')}<span class="spacer"></span><button type="button" class="btn small ghost" data-editcr>${isHb(c.slug) ? '✎ Edit' : '✎ Customize'}</button><button type="button" class="btn small ghost sb-remove" data-remove>✕ Remove</button></div>`}
     <div class="sb-traits">${traitChips([SIZES[sb.size] ? sb.size : null, ...traits].filter(Boolean).map((t) => (SIZES[t] ? SIZES[t].toLowerCase() : t)), sb.rarity)}</div>
     <div class="sb-rk"><span>Recall Knowledge</span><b>DC ${rk}</b><span class="muted">${esc(rkSkills)}</span></div>
     ${preview ? '' : `<div class="sb-hp">
@@ -731,10 +808,51 @@ const BF_KEY = 'pf2e.gm.bestiary';
 const bf = Object.assign({ q: '', min: null, max: null, traits: [], rarity: [], size: [], book: '', reprints: false, sort: 'level' }, readJson(BF_KEY) || {});
 const ALIGN = ['good', 'evil', 'lawful', 'chaotic'];
 const BOOK_GROUPS = [['core', 'Remaster core books'], ['lo', 'Lost Omens & Paizo blog'], ['ap', 'Adventure Paths & adventures'], ['pfs', 'Pathfinder Society'], ['legacy', 'Legacy (pre-remaster)']];
+// ------------------------------------------------------------------ creature editor (homebrew)
+async function spellLookup() {
+  await db.load(['spells']);
+  return (name) => { const r = db.findName(name, ['spells']); return r ? 'spells/' + r.slug : null; };
+}
+// Creatures in this encounter that use the statblock: new name, level, HP and AC (damage taken stays).
+function syncCopies(slug, d) {
+  let n = 0;
+  for (const c of enc.list) {
+    if (c.slug !== slug) continue;
+    const lost = c.max - c.hp;
+    c.name = d.name; c.level = d.level; c.ac = d.ac; c.per = d.perception;
+    c.max = Math.max(1, d.hp + adjHp(d.level, c.adj));
+    c.hp = Math.max(0, Math.min(c.max, c.max - lost));
+    n++;
+  }
+  if (n) save();
+  return n;
+}
+// id: edit that homebrew creature. copy: start from an official statblock and save a new one.
+function editCreature({ id = null, sb, copy = false, after, label }) {
+  const src = JSON.parse(JSON.stringify(sb));
+  delete src.slug; delete src.src; delete src.book;
+  openCreatureEditor({
+    sb: src,
+    title: id ? 'Edit ' + src.name : copy ? 'Copy of ' + src.name : 'New creature',
+    saveLabel: label || (id ? 'Save changes' : 'Save to My creatures'),
+    spellIndex: spellLookup,
+    onSave: (data) => {
+      const nid = id || newId();
+      hbSave(nid, data);
+      if (after) after(nid, data);
+      syncCopies(HB + nid, data);
+      toast(id ? 'Saved.' : `${data.name} saved to My creatures.`, 'ok');
+      render();
+    },
+    onDelete: id ? () => { hbDelete(id); if (after) after(null); toast('Deleted.'); render(); } : null,
+  });
+}
+
 function openBestiary() {
-  const all = db.list('creatures');
+  let all = [...hbList(), ...db.list('creatures')];
   const books = db.list('creatureBooks');
   const bookName = Object.fromEntries(books.map((b) => [b.id, b.name]));
+  bookName.mine = 'My creatures';
   const bookGroup = Object.fromEntries(books.map((b) => [b.id, b.group]));
   if (bf.min == null || bf.max == null) { bf.min = Math.max(-1, partyLevel() - 4); bf.max = Math.min(25, partyLevel() + 4); }
   let limit = 60; let peek = null; let tq = '';
@@ -744,6 +862,7 @@ function openBestiary() {
     <div class="filters best-f">
       <input type="search" class="best-q" placeholder="Search by name…" aria-label="Search creatures" value="${esc(bf.q)}">
       <label class="small best-lv">Level <select data-f="min">${lvOpts(bf.min)}</select> to <select data-f="max">${lvOpts(bf.max)}</select></label>
+      <button type="button" class="btn" data-newcr>+ New creature</button>
     </div>
     <div class="best-traits">
       <div class="best-tsel"><span class="label">Traits</span><span class="best-chips"></span><input type="text" class="best-tin" placeholder="Add a trait…" aria-label="Add a trait" autocomplete="off"></div>
@@ -753,7 +872,7 @@ function openBestiary() {
       <div class="best-grid">
         <div><span class="label">Rarity</span><div class="inv-chips">${['common', 'uncommon', 'rare', 'unique'].map((r) => `<button type="button" class="chip-btn" data-rar="${r}">${titleCase(r)}</button>`).join('')}</div></div>
         <div><span class="label">Size</span><div class="inv-chips">${Object.entries(SIZES).map(([k, v]) => `<button type="button" class="chip-btn" data-size="${k}">${v}</button>`).join('')}</div></div>
-        <div><span class="label">Book</span><select data-f="book" aria-label="Book"><option value="">All books</option>
+        <div><span class="label">Book</span><select data-f="book" aria-label="Book"><option value="">All books</option><option value="mine">My creatures</option>
           ${BOOK_GROUPS.map(([g, label]) => `<optgroup label="${esc(label)}"><option value="g:${g}">All: ${esc(label)}</option>${books.filter((b) => b.group === g).map((b) => `<option value="${esc(b.id)}">${esc(b.name)} (${b.count})</option>`).join('')}</optgroup>`).join('')}</select></div>
         <div><span class="label">Sort</span><select data-f="sort" aria-label="Sort"><option value="level">Level, low to high</option><option value="level-desc">Level, high to low</option><option value="name">Name</option><option value="hp">HP, high to low</option></select>
           <label class="best-chk small" title="The same creature printed again in another book"><input type="checkbox" data-f="reprints"> Show reprints (same creature, other books)</label></div>
@@ -816,24 +935,39 @@ function openBestiary() {
       const xp = d < -4 ? 0 : XP_BY_DIFF[Math.max(-4, Math.min(4, d))];
       return `<div class="best-row ${peek === c.slug ? 'open' : ''}">
         <span class="gm-lvl">${c.level}</span>
-        <button type="button" class="best-main" data-peek="${esc(c.slug)}" aria-expanded="${peek === c.slug}"><span><b>${esc(c.name)}</b>${c.rarity !== 'common' ? ` <span class="badge ${esc(c.rarity)}">${esc(c.rarity)}</span>` : ''}${c.dup ? ' <span class="badge">reprint</span>' : ''}</span>
+        <button type="button" class="best-main" data-peek="${esc(c.slug)}" aria-expanded="${peek === c.slug}"><span><b>${esc(c.name)}</b>${c.rarity !== 'common' ? ` <span class="badge ${esc(c.rarity)}">${esc(c.rarity)}</span>` : ''}${c.dup ? ' <span class="badge">reprint</span>' : ''}${c.book === 'mine' ? ' <span class="badge accent">mine</span>' : ''}</span>
           <span class="muted small">${esc((c.traits || []).filter((t) => !ALIGN.includes(t)).slice(0, 5).map(traitName).join(', '))} · HP ${c.hp} · AC ${c.ac} · ${xp} XP · ${esc(bookName[c.book] || '')}</span></button>
         ${n ? `<span class="best-n">×${n}</span>` : ''}<button type="button" class="btn small primary" data-add="${esc(c.slug)}">Add</button>
       </div>${peek === c.slug ? '<div class="best-peek"><p class="muted small">Loading…</p></div>' : ''}`;
     }).join('') + (shown.length > limit ? `<div class="best-more-row"><button type="button" class="btn" data-moreres>Show more (${shown.length - limit} left)</button></div>` : '') || '<p class="muted small">Nothing matches. Try removing a trait or widening the levels.</p>';
-    $$('[data-add]', m.body).forEach((b) => (b.onclick = () => { addCreature(db.get('@creatures/' + b.dataset.add)); drawList(); }));
+    $$('[data-add]', m.body).forEach((b) => (b.onclick = () => { addCreature(crIndex(b.dataset.add)); drawList(); }));
     $$('[data-peek]', m.body).forEach((b) => (b.onclick = () => { peek = peek === b.dataset.peek ? null : b.dataset.peek; drawList(); }));
     const more = $('[data-moreres]', m.body); if (more) more.onclick = () => { limit += 60; drawList(); };
     const pk = $('.best-peek', m.body);
     if (pk) statblock(peek).then((sb) => {
       if (!pk.isConnected) return;
-      pk.innerHTML = sb ? statblockHtml(sb, { adj: 'normal', tag: '', conditions: [] }, true) : '<p class="muted small">Statblock not available.</p>';
+      const mine = isHb(peek);
+      pk.innerHTML = sb ? `<div class="row best-peek-acts"><button type="button" class="btn small" data-edit>${mine ? '✎ Edit' : '✎ Copy &amp; edit'}</button></div>${statblockHtml(sb, { adj: 'normal', tag: '', conditions: [] }, true)}` : '<p class="muted small">Statblock not available.</p>';
       wireRefs(db, pk);
+      const ed = $('[data-edit]', pk);
+      if (ed) ed.onclick = () => editCreature(mine
+        ? { id: peek.slice(HB.length), sb, after: (id) => { peek = id ? HB + id : null; refresh(); } }
+        : { sb, copy: true, after: showMine });
     });
     drawSugg(all.filter((c) => pass(c, true)));
   };
   const changed = () => { limit = 60; keep(); drawChips(); drawList(); };
+  const refresh = () => { all = [...hbList(), ...db.list('creatures')]; changed(); };
   const qi = $('.best-q', m.body);
+  // After saving a new one: show it, opened, under My creatures.
+  const showMine = (id, d) => {
+    peek = HB + id; bf.book = 'mine'; bf.q = ''; qi.value = '';
+    bf.min = Math.min(bf.min, d.level); bf.max = Math.max(bf.max, d.level);
+    $('[data-f="book"]', m.body).value = 'mine'; $('[data-f="min"]', m.body).value = bf.min; $('[data-f="max"]', m.body).value = bf.max;
+    $('.best-more', m.body).open = true;
+    refresh();
+  };
+  $('[data-newcr]', m.body).onclick = () => editCreature({ sb: blankCreature(Math.max(-1, partyLevel())), after: showMine });
   qi.oninput = () => { bf.q = qi.value; limit = 60; drawList(); };
   const ti = $('.best-tin', m.body);
   ti.oninput = () => { tq = ti.value; drawSugg(all.filter((c) => pass(c, true))); };
@@ -964,7 +1098,7 @@ async function render() {
     <div class="gm-grid">
       <aside class="gm-col gm-party card tight">${partyColumn()}</aside>
       <section class="gm-col gm-enc card tight">${encounterHtml()}</section>
-      <aside class="gm-col gm-sb card tight">${sb ? statblockHtml(sb, c) : '<p class="muted">Select a creature to see its statblock.</p>'}</aside>
+      <aside class="gm-col gm-sb card tight">${sb ? statblockHtml(sb, c) : c ? `<p class="muted">${esc(c.name)}’s statblock isn’t available (it was deleted from My creatures).</p><button type="button" class="btn small ghost sb-remove" data-remove>✕ Remove from encounter</button>` : '<p class="muted">Select a creature to see its statblock.</p>'}</aside>
     </div>`;
   $$('.gm-col').forEach((el, i) => { el.scrollTop = scroll[i] || 0; });
   drawSync();
@@ -1018,12 +1152,23 @@ function wireSb(c) {
   $$('[data-hp]', sbEl).forEach((b) => (b.onclick = () => hpPad(`${c.name} ${c.tag}`, b.dataset.hp, (n) => applyHp(c, b.dataset.hp, n))));
   const ac = $('[data-addcond]', sbEl); if (ac) ac.onclick = () => pickCondition(c);
   const rm = $('[data-remove]', sbEl); if (rm) rm.onclick = () => removeCreature(c);
+  const ed = $('[data-editcr]', sbEl);
+  if (ed) ed.onclick = async () => {
+    const sb = await statblock(c.slug); if (!sb) return;
+    if (isHb(c.slug)) { editCreature({ id: c.slug.slice(HB.length), sb }); return; }
+    // An official creature: save a copy to My creatures and use it for every copy in this encounter.
+    const old = c.slug;
+    editCreature({ sb, copy: true, label: 'Save and use it here', after: (id) => { for (const x of enc.list) if (x.slug === old) x.slug = HB + id; } });
+  };
   $$('[data-rmcond]', sbEl).forEach((b) => (b.onclick = () => { c.conditions.splice(Number(b.dataset.rmcond), 1); save(); render(); }));
   wireRefs(db, sbEl);
 }
 await initEncounters();
+await hbPull();
+if (store.user && Object.values(hb.items).some((it) => it.dirty)) hbPush();
 document.addEventListener('visibilitychange', async () => {
   if (document.hidden || !store.user) return;
+  await hbPull();
   const list = await remoteList();
   if (await refreshActive(list)) render();
 });

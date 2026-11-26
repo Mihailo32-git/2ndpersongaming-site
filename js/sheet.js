@@ -11,6 +11,7 @@ import { test, itemOptions } from './predicate.js';
 import { slotRows, ordinal, spellList, isCantrip, attrLabel } from './casting.js';
 import { openSpellPicker, rarityBadge } from './pickers.js';
 import { openDrawer } from './drawer.js';
+import { renderCompanions } from './companion-ui.js';
 
 // Wrapped in an async function instead of top-level await so older tablet browsers (Chrome 80+) can run it.
 (async () => {
@@ -50,8 +51,8 @@ if (!readOnly && charRec.id && store.conflictFor(charRec.id)) {
 }
 const build = normalizeBuild(charRec.build);
 const state = Object.assign({ hp: null, temp: 0, hero: 1, focus: null, dying: 0, wounded: 0, conditions: [], effects: [], raging: false, shieldRaised: false,
-  used: {}, prep: {}, innateUsed: {}, dailyUsed: {}, notes: '' }, charRec.state || {});
-for (const k of ['used', 'prep', 'innateUsed', 'dailyUsed']) state[k] = state[k] || {};
+  used: {}, prep: {}, innateUsed: {}, dailyUsed: {}, notes: '', companions: {} }, charRec.state || {});
+for (const k of ['used', 'prep', 'innateUsed', 'dailyUsed', 'companions']) state[k] = state[k] || {};
 if (state.effects.length) await db.load(['spell-effects', 'feat-effects', 'equipment-effects']);
 let ch = null;
 let tab = sessionStorage.getItem('pf2e.sheetTab') || 'actions';
@@ -265,6 +266,7 @@ function TABS() {
     { id: 'feats', label: 'Feats' },
     { id: 'equipment', label: 'Equipment' },
     { id: 'inventory', label: 'Inventory' },
+    { id: 'companions', label: 'Companions' },
     { id: 'crafting', label: 'Crafting' },
     { id: 'notes', label: 'Notes' },
   ];
@@ -832,6 +834,10 @@ function openCraftList() {
   };
   q.oninput = draw; only.onchange = draw; draw();
 }
+
+TAB_RENDER.companions = (el) => {
+  renderCompanions(el, { db, build, state, ch, readOnly, saveBuild, saveState, rerender: () => render() });
+};
 
 TAB_RENDER.notes = (el) => {
   el.innerHTML = `<h3 class="sub-head">Session notes</h3><textarea id="notesArea" ${readOnly ? 'readonly' : ''} placeholder="Loot, NPCs, quests…" aria-label="Session notes">${esc(state.notes || '')}</textarea>

@@ -50,6 +50,7 @@ export function normalizeBuild(b0) {
   if (Array.isArray(b.spells.sig)) b.spells.sig = {};
   b.details = Object.assign(d.details, b.details || {});
   b.feats = b.feats || {}; b.choices = b.choices || {}; b.inventory = b.inventory || []; b.formulas = b.formulas || []; b.languages = b.languages || [];
+  b.companions = Array.isArray(b.companions) ? b.companions : [];
   return b;
 }
 
@@ -685,6 +686,7 @@ export class Engine {
     // Remaining ActiveEffectLike rules
     ch.focusMax = 0;
     ch.ancestryHp = null;
+    ch.familiarAbilities = 0; // abilities a familiar gets each day (Enhanced Familiar, witch's familiar…)
     for (const { r, inst } of aels) {
       const path = this._subst(r.path || '', ch, inst);
       if (/^system\.skills\./.test(path)) continue;
@@ -709,6 +711,7 @@ export class Engine {
       else if (path === 'system.proficiencies.spellcasting.rank') R.spellcasting = up(R.spellcasting);
       else if ((m = path.match(/^system\.proficiencies\.classDCs\.([\w-]+)\.rank$/)) && m[1] === classSlug) R.classDC = up(R.classDC);
       else if (path === 'system.resources.focus.max') ch.focusMax = up(ch.focusMax);
+      else if (path === 'system.attributes.familiarAbilities.value') ch.familiarAbilities = up(ch.familiarAbilities);
       // Heritages that change the ancestry's Hit Points (Sturdy Skeleton, Great Kholo: 10 instead of 6/8).
       else if (path === 'system.attributes.ancestryhp') ch.ancestryHp = up(ch.ancestryHp ?? ch.ancestry?.hp ?? 0);
       else if ((m = path.match(/^system\.details\.ancestry\.(adopted|versatile)$/))) { const v = this._subst(val, ch, inst); if (typeof v === 'string' && !v.includes('{')) ch.options.add(`actor-detail:${m[1]}:${v}`); }

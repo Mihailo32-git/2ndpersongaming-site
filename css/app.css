@@ -1175,3 +1175,64 @@ button.gm-cond { cursor: pointer; min-height: 30px; }
 .best-peek .sb-head h2 { font-size: 17px; }
 .best-more-row { display: flex; justify-content: center; padding: 10px; }
 @media (max-width: 999px) { .gm-combat { top: 64px; } }
+/* ------------------------------------------------------------ creature editor (GM homebrew) */
+.cr-edit .modal-body { padding-bottom: 0; }
+.ce-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 0 12px; }
+.ce-grid .wide { grid-column: span 2; }
+.ce-grid .full { grid-column: 1 / -1; }
+@media (max-width: 520px) { .ce-grid .wide { grid-column: 1 / -1; } }
+.ce-grid .field small, .cr-edit .field small { font-size: 11px; color: var(--faint); }
+.ce-attrs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0 8px; }
+@media (max-width: 520px) { .ce-attrs { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.ce-attrs input, .ce-grid input[type=number] { font-family: var(--mono); }
+.cr-edit textarea { width: 100%; resize: vertical; font: inherit; }
+.cr-edit .inv-h { margin-top: 18px; }
+.ce-card { padding: 10px 12px 8px; margin-bottom: 8px; border-radius: 12px; background: var(--glass-2); border: 1px solid var(--glass-line); }
+.ce-rm { color: var(--bad-ink); }
+.ce-foot { position: sticky; bottom: 0; display: flex; align-items: center; gap: 8px; margin: 18px -14px 0; padding: 12px 14px; background: var(--panel); border-top: 1px solid var(--line); z-index: 2; }
+.ce-foot .spacer { flex: 1; }
+.best-peek-acts { justify-content: flex-end; margin-bottom: 6px; }
+.best-f .btn { flex: 0 0 auto; }
+/* ------------------------------------------------------------ companions tab */
+.comp-list { display: flex; flex-direction: column; gap: 12px; }
+.comp-card { padding: 12px 14px; border-radius: 14px; background: var(--glass-2); border: 1px solid var(--glass-line); }
+.comp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+.comp-head h3 { margin: 0; font-size: 18px; }
+.comp-hp { margin: 6px 0 10px; }
+.comp-hp-num { display: flex; align-items: baseline; gap: 6px; margin-bottom: 6px; }
+.comp-hp-num b { font-family: var(--mono); font-size: 24px; }
+.comp-hp-num span { color: var(--muted); }
+.comp-hp-btns { gap: 6px; margin-top: 8px; }
+.comp-defs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 8px 0; }
+.comp-defs span { display: flex; flex-direction: column; align-items: center; padding: 6px 4px; border-radius: 10px; background: rgba(255, 255, 255, .04); border: 1px solid var(--glass-line); }
+.comp-defs small { color: var(--muted); font-size: 11px; }
+.comp-defs b { font-family: var(--mono); font-size: 17px; }
+@media (max-width: 520px) { .comp-defs { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.comp-line { margin: 8px 0 4px; }
+.comp-attrs { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 4px 0; }
+.comp-strike { padding: 5px 0; border-top: 1px solid var(--line3); font-size: 14px; }
+.comp-sub { margin: 12px 0 4px; font-size: 13px; }
+.comp-abil { border-top: 1px solid var(--line3); padding: 6px 0; }
+.comp-abil summary { cursor: pointer; }
+.comp-abil .badge { margin-left: 4px; }
+.comp-desc { padding: 4px 0 2px 14px; color: var(--ink2); font-size: 13.5px; }
+.comp-desc p { margin: 3px 0; }
+.comp-notes { margin: 10px 0 0; padding-left: 18px; }
+.comp-own-notes { white-space: pre-wrap; color: var(--ink2); }
+.comp-shared { margin: 4px 0; }
+.comp-add { gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.comp-setup .modal-body { padding-bottom: 0; }
+.comp-specs, .comp-fam { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px; margin: 6px 0 10px; }
+.comp-check { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--glass-line); background: rgba(255, 255, 255, .03); cursor: pointer; }
+.comp-check.on { border-color: var(--accent-line); background: var(--accent-soft); }
+.comp-check input { margin-top: 3px; }
+.comp-check > span { display: flex; flex-direction: column; min-width: 0; }
+.comp-fam-desc { color: var(--muted); }
+.comp-fam { max-height: 46vh; overflow: auto; }
+.comp-boosts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0; }
+.comp-boosts .label { width: 36px; }
+.comp-preview { margin: 12px 0 0; }
+.comp-preview .comp-card { background: rgba(255, 255, 255, .02); }
+.comp-setup input[type=search] { width: 100%; margin-top: 4px; }
+.gm-comp { display: flex; justify-content: space-between; gap: 6px; margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line2); font-size: 12px; color: var(--muted); }
+.gm-comp b { color: var(--ink); }

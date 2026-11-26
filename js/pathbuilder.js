@@ -440,7 +440,27 @@ export function convertPathbuilder(data, db, engine) {
     const rec = find('equipment', name);
     if (rec) b.formulas.push(refOf(rec)); else missing('Formula', name);
   }
-  if ((pb.pets || []).length || (pb.familiars || []).length) notes.push('Animal companions and familiars aren\'t imported (this site shows them as text only).');
+  // Companions: animal companions and familiars from Pathbuilder's pets, the eidolon from the summoner's specials.
+  // Types are matched by name when the Companions tab opens; anything unknown asks for a type there.
+  b.companions = [];
+  const slugOf = (x) => String(x || '').toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const petName = (p, fallback) => { const n = String(p.name || '').split(' - ')[0].trim(); return n || fallback; };
+  for (const p of pb.pets || []) {
+    if (!p || !/animal companion/i.test(p.type || '')) continue;
+    const stage = p.incredible && p.incredibleType ? slugOf(p.incredibleType) : p.mature ? 'mature' : 'young';
+    b.companions.push({ id: 'c' + Math.random().toString(36).slice(2, 10), kind: 'animal', name: petName(p, p.animal), type: slugOf(p.animal), stage,
+      specs: (p.specializations || []).map(slugOf), barding: {} });
+  }
+  const fams = (pb.familiars || []).length ? pb.familiars : (pb.pets || []).filter((p) => /familiar/i.test(p?.type || ''));
+  for (const f of fams) {
+    b.companions.push({ id: 'c' + Math.random().toString(36).slice(2, 10), kind: 'familiar', name: petName(f, 'Familiar'),
+      abilities: (f.abilities || []).map((a) => slugOf(String(a).replace(/\s*\([^)]*\)$/, ''))) });
+  }
+  // "Angel Eidolon", "Elemental Eidolon (Air)"; not features like "Manifest Eidolon" or "Eidolon Symbiosis"
+  const eid = (pb.specials || []).map((x) => String(x).trim().match(/^([A-Z][\w' -]*?) Eidolon(?:\s*\([^)]*\))?$/)).find((m) => m && !/^(Manifest|Reinforce|Unfetter|Share|Twin|Meld Into|Expert Combat)$/i.test(m[1]));
+  if (eid) b.companions.push({ id: 'c' + Math.random().toString(36).slice(2, 10), kind: 'eidolon', name: 'Eidolon', type: slugOf(eid[1]), kas: 'str', boosts: {},
+    primary: { option: 'd8', trait: 'trip', dmg: 'slashing', name: 'primary attack' }, secondary: { name: 'secondary attack', dmg: 'bludgeoning' } });
+  if (b.companions.length) notes.push(`Companions added on the Companions tab: ${b.companions.map((c) => c.name).join(', ')}. Check their set-up there${b.companions.some((c) => c.kind === 'eidolon') ? ' (eidolon attacks and attribute boosts aren\'t in Pathbuilder\'s file)' : ''}.`);
 
   // ---------------------------------------------------------------- check against Pathbuilder's numbers
   ch = engine.compute(b);
