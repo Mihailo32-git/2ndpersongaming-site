@@ -522,7 +522,7 @@ TAB_RENDER.actions = (el) => {
       saveState(); draw();
     }));
     $$('[data-row-show]', list).forEach((r) => {
-      const open = () => showRef(db, r.dataset.rowShow, { afterHtml: actionExtras(r.dataset.rowShow) });
+      const open = () => showRef(db, r.dataset.rowShow, { extras: actionExtras });
       r.onclick = open;
       r.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
     });
@@ -1194,7 +1194,7 @@ function wire() {
     row.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
   });
   $$('[data-cond]', main).forEach((b) => (b.onclick = () => openCondition(Number(b.dataset.cond))));
-  $$('.act-row[data-row-show]', main).forEach((r) => (r.onclick = (e) => { if (!e.target.closest('[data-show]')) showRef(db, r.dataset.rowShow, { afterHtml: actionExtras(r.dataset.rowShow) }); }));
+  $$('.act-row[data-row-show]', main).forEach((r) => (r.onclick = (e) => { if (!e.target.closest('[data-show]')) showRef(db, r.dataset.rowShow, { extras: actionExtras }); }));
   const invPanel = $('#tabPanel'); if (invPanel && (tab === 'equipment' || tab === 'inventory')) wireInv(invPanel);
   if (readOnly) { $$('.no-print', main).forEach((b) => b.remove()); $$('.pip', main).forEach((b) => (b.disabled = true)); return; }
   const amt = () => Math.max(0, Number($('#hpAmt').value) || 0);

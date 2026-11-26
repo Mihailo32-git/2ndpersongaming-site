@@ -113,16 +113,20 @@ export function headerLine(rec) {
 }
 
 /** Shows the rules text of a reference, with clickable links to other entries. */
-export async function showRef(db, ref, { stack = null, extraHtml = '', afterHtml = '' } = {}) {
+// extras(ref) → HTML shown after the rules text (the sheet's DC tables and "your feats that mention it"); the window keeps it,
+// so links followed inside the window and the back button show the same extras for whatever they open.
+export async function showRef(db, ref, { stack = null, extraHtml = '', afterHtml = '', extras = null } = {}) {
   const rec = db.get(ref);
   if (!rec) {
     const [pack] = refParts(ref);
-    if (pack && !db.has(pack)) { await db.load([pack]); return showRef(db, ref, { stack, extraHtml, afterHtml }); }
+    if (pack && !db.has(pack)) { await db.load([pack]); return showRef(db, ref, { stack, extraHtml, afterHtml, extras }); }
     toast('Not found: ' + ref, 'error');
     return;
   }
   const m = stack || modal(rec.name, { wide: false });
   m.history = m.history || [];
+  if (extras) m.extras = extras;
+  if (!afterHtml && m.extras) afterHtml = m.extras(ref) || '';
   m.setTitle(rec.name);
   m.body.innerHTML = `<div class="ref-view"><div class="ref-head"><span class="glyph">${actionGlyph(rec)}</span><span class="kind">${esc(headerLine(rec))}</span></div>
     ${traitChips(rec.traits, rec.rarity)}<div class="meta">${metaLines(rec)}</div>${extraHtml}<div class="rules-text"><p class="muted">Loading…</p></div>${afterHtml}
