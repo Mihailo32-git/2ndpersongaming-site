@@ -399,8 +399,20 @@ function actionGroups() {
 // Under an action's rules text: the Medicine DC table for Treat Wounds and Battle Medicine, and this character's feats,
 // features and items whose rules change the action (their text links to it: Mortal Healing → Treat Wounds).
 const HEAL_DCS = [[15, 1, 0], [20, 2, 10], [30, 3, 30], [40, 4, 50]];
+// Psychics: a psi cantrip's window also shows what the conscious mind changes about it and its Amp, plus the
+// amps from feats that can be used instead (Warp Space, Mental Balm…).
+function psiExtras(ref) {
+  const e = ch.spellcasting.entries.find((x) => x.mind && x.psiCantrips);
+  if (!e || !e.psiCantrips.some((p) => p.ref === ref)) return '';
+  const text = ((e.mind.psychic || {}).amps || {})[ref];
+  const alts = ch.items.filter((i) => i.rec && i.rec.altAmp);
+  let html = `<h4 class="act-x-h">Psi cantrip <span class="muted small">${esc(e.mind.name)} · amp it by spending 1 Focus Point</span></h4>${text ? `<div class="rules-text psi-amp">${text}</div>` : ''}`;
+  if (alts.length) html += `<h4 class="act-x-h">Other amps you know <span class="muted small">use one in place of the normal amp</span></h4>`
+    + alts.map((i) => `<div class="rules-text psi-amp"><p><a class="ref" data-ref="${esc(refOf(i.rec).slice(1))}"><b>${esc(i.rec.name)}</b></a></p>${i.rec.altAmp}</div>`).join('');
+  return html;
+}
 function actionExtras(ref) {
-  let html = '';
+  let html = psiExtras(ref);
   if (ref === '@actions/treat-wounds' || ref === '@feats/battle-medicine') {
     const rank = ch.ranks.skills.medicine || 0;
     html += `<h4 class="act-x-h">Medicine DCs <span class="muted small">your Medicine ${signed(ch.skills.medicine.total)} (${esc(RANKS[rank].toLowerCase())})</span></h4>
@@ -634,7 +646,7 @@ TAB_RENDER.spells = (el) => {
       if (e.granted?.length) html += `<div class="rank-block"><div class="rank-head"><span class="rk">Granted</span></div>${e.granted.map((g) => spellRow(g, { extra: ` <span class="badge">${g.rank ? ordinal(g.rank) : 'cantrip'} · ${esc(g.source)}</span>` })).join('')}</div>`;
     } else {
       const ranks = new Set([0, ...Object.keys(e.slots).map(Number), ...Object.keys(e.repertoire || {}).map(Number)]);
-      if (e.psiCantrips?.length) html += `<div class="rank-block"><div class="rank-head"><span class="rk">Psi</span><span class="small muted">spend 1 Focus Point to amp</span></div>${e.psiCantrips.map((p) => spellRow(p, { extra: p.unique ? ' <span class="badge accent">unique</span>' : '' })).join('')}</div>`;
+      if (e.psiCantrips?.length) html += `<div class="rank-block"><div class="rank-head"><span class="rk">Psi</span><span class="small muted">spend 1 Focus Point to amp · tap a cantrip to read its amp</span></div>${e.psiCantrips.map((p) => spellRow(p, { extra: p.unique ? ' <span class="badge accent">unique</span>' : '' })).join('')}</div>`;
       for (const rank of [...ranks].sort((a, b) => a - b)) {
         const n = e.slots[rank] || 0;
         const list = (e.repertoire || {})[rank] || [];
@@ -1241,7 +1253,7 @@ TAB_RENDER.notes = (el) => {
 
 // ------------------------------------------------------------------ events
 function wire() {
-  $$('[data-show]', main).forEach((e) => (e.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); showRef(db, e.dataset.show); }));
+  $$('[data-show]', main).forEach((e) => (e.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); showRef(db, e.dataset.show, { extras: actionExtras }); }));
   wireRefs(db, main);
   $$('[role=tab][data-tab]', main).forEach((b) => (b.onclick = () => { tab = b.dataset.tab; sessionStorage.setItem('pf2e.sheetTab', tab); render(); }));
   $$('[data-bd]', main).forEach((p) => (p.onclick = () => {
