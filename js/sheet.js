@@ -348,7 +348,7 @@ TAB_RENDER.actions = (el) => {
   };
   const row = (x) => `<div class="act-row ${x.cant ? 'cant' : ''}" data-row-show="${esc(refOf(x.rec))}" role="button" tabindex="0">
     <span class="glyph" title="${esc(COSTS.find((c) => c.id === costOf(x.rec))?.title || '')}">${actionGlyph(x.rec) || '<span class="muted">—</span>'}</span>
-    <span class="name">${esc(x.rec.name)}${x.trainedOnly ? ' <span class="badge">Trained</span>' : ''}${modeOf(x.rec) !== 'encounter' ? ` <span class="badge mode">${esc(titleCase(modeOf(x.rec)))}</span>` : ''}</span>${right(x)}</div>`;
+    <span class="name">${esc(x.rec.name)}${x.trainedOnly ? ' <span class="badge">Trained</span>' : ''}${modeOf(x.rec) !== 'encounter' && !/^(Exploration|Downtime) activities$/.test(x.head || '') ? ` <span class="badge mode">${esc(titleCase(modeOf(x.rec)))}</span>` : ''}</span>${right(x)}</div>`;
   const draw = () => {
     const counts = {};
     for (const t of ACT_TABS) counts[t.id] = groups[t.id].filter(pass).length;
