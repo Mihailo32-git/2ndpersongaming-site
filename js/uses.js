@@ -50,10 +50,13 @@ export function innateList(ch, state) {
   return (ch.spellcasting?.innate || []).filter((s) => s.rec && !(s.rec.traits || []).includes('cantrip') && !s.rec.cantrip)
     .map((s) => ({ name: s.rec.name, ref: s.ref, rank: s.rank, source: sourceLabel(s.source), used: !!(state.innateUsed || {})[s.ref] }));
 }
-/** innateList grouped by where the spells come from: [{source, spells}] */
+/** innateList grouped by where the spells come from: [{source, spells, unpicked}] (unpicked: ranks of an
+ * archetype like Captivator whose spell hasn't been chosen in the builder yet) */
 export function innateGroups(ch, state) {
   const out = [];
-  for (const x of innateList(ch, state)) { let g = out.find((y) => y.source === x.source); if (!g) out.push((g = { source: x.source, spells: [] })); g.spells.push(x); }
+  const group = (src) => { let g = out.find((y) => y.source === src); if (!g) out.push((g = { source: src, spells: [], unpicked: [] })); return g; };
+  for (const x of innateList(ch, state)) group(x.source).spells.push(x);
+  for (const s of ch.spellcasting?.innate || []) if (s.pickFor && !s.rec) group(sourceLabel(s.source)).unpicked.push(s.rank);
   return out;
 }
 /** Daily resources (versatile vials, infused reagents…): [{label, max, left}] */

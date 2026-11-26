@@ -492,8 +492,10 @@ TAB_RENDER.spells = (el) => {
       ${f.cantrips.map((s) => spellRow(s, { extra: ` <span class="badge">cantrip</span> <span class="small muted">${esc(s.source)} · DC ${s.dc} · ${signed(s.attack)}</span>` })).join('')}
       ${f.spells.map((s) => spellRow(s, { extra: ` <span class="small muted">${esc(s.source)} · DC ${s.dc} · ${signed(s.attack)}</span>`, actions: readOnly ? '' : `<button type="button" class="btn small" data-focuscast ${state.focus > 0 ? '' : 'disabled'}>Cast (1 FP)</button>` })).join('')}</section>`;
   }
-  if (sc.innate.some((s) => s.rec)) {
+  const unpickedInnate = sc.innate.filter((s) => s.pickFor && !s.rec);
+  if (sc.innate.some((s) => s.rec) || unpickedInnate.length) {
     html += `<section class="card" style="background:transparent"><div class="sc-head"><h3>Innate spells</h3></div>
+      ${unpickedInnate.length ? `<p class="notice small">${esc([...new Set(unpickedInnate.map((s) => s.source))].join(', '))}: ${unpickedInnate.map((s) => ordinal(s.rank)).join(', ')}-rank spell${unpickedInnate.length > 1 ? 's' : ''} not chosen yet. ${readOnly ? '' : `<a href="builder.html?id=${encodeURIComponent(charRec.id)}">Pick ${unpickedInnate.length > 1 ? 'them' : 'it'} in the builder</a> (Spells step).`}</p>` : ''}
       ${sc.innate.filter((s) => s.rec).map((s) => {
         const c = isCantrip(s.rec);
         const usedToday = !!state.innateUsed[s.ref];

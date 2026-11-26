@@ -373,7 +373,9 @@ const compLines = (p) => {
 function spentLine(p) {
   const st = p.state || {};
   const parts = [];
-  for (const g of innateGroups(p.ch, st)) parts.push(`<span title="${esc(g.source)} spells (once a day each) left today">✧ ${esc(g.source)} ${g.spells.filter((x) => !x.used).length}/${g.spells.length}</span>`);
+  for (const g of innateGroups(p.ch, st)) parts.push(g.spells.length
+    ? `<span title="${esc(g.source)} spells (once a day each) left today">✧ ${esc(g.source)} ${g.spells.filter((x) => !x.used).length}/${g.spells.length}</span>`
+    : `<span class="gm-warn" title="${esc(g.source)}: spells not chosen yet (builder, Spells step)">✧ ${esc(g.source)} not chosen</span>`);
   for (const d of dailyList(p.ch, st)) parts.push(`<span title="${esc(d.label)}">⚗ ${d.left}/${d.max}</span>`);
   const lim = limitedList(p.ch, st);
   if (lim.length) { const left = lim.reduce((a, x) => a + x.max - x.used, 0), tot = lim.reduce((a, x) => a + x.max, 0); parts.push(`<span title="Limited-use abilities left" class="${left < tot ? 'gm-warn' : ''}">⏱ ${left}/${tot}</span>`); }
@@ -422,7 +424,7 @@ function openPc(p) {
       <div><h3 class="inv-h">Resources</h3>
         <p class="small">Hero points <b>${p.state.hero || 0}</b>${fmax ? ` · Focus <b>${p.state.focus ?? fmax}/${fmax}</b>` : ''}</p>
         ${res.map((e) => `<p class="small"><span class="muted">${esc(e.label)}</span><br>${Object.entries(e.ranks).map(([r, [l, t]]) => `<span class="gm-slot ${l ? '' : 'out'}">${ordinal(r)} <b>${l}</b>/${t}</span>`).join(' ')}</p>`).join('') || '<p class="muted small">No spell slots.</p>'}
-        ${innateGroups(ch, p.state).map((g) => `<p class="small"><span class="muted">${esc(g.source)} spells (once a day each)</span><br>${g.spells.map((x) => `<span class="gm-slot ${x.used ? 'out' : ''}" title="${x.used ? 'Used today' : 'Available'}">${x.rank ? ordinal(x.rank) + ' ' : ''}${esc(x.name)}</span>`).join(' ')}</p>`).join('')}
+        ${innateGroups(ch, p.state).map((g) => `<p class="small"><span class="muted">${esc(g.source)} spells (once a day each)</span><br>${g.spells.map((x) => `<span class="gm-slot ${x.used ? 'out' : ''}" title="${x.used ? 'Used today' : 'Available'}">${x.rank ? ordinal(x.rank) + ' ' : ''}${esc(x.name)}</span>`).join(' ')}${g.unpicked.map((r) => ` <span class="gm-slot out" title="Not chosen yet: the player picks it in the builder (Spells step)">${ordinal(r)} not chosen</span>`).join('')}</p>`).join('')}
         ${daily.map((d) => `<p class="small"><span class="muted">${esc(d.label)}</span> <b>${d.left}</b>/${d.max} left</p>`).join('')}</div>
     </div>
     ${lim.length || cons.total ? `<div class="gm-card-grid" style="margin-top:12px">
