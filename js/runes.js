@@ -21,8 +21,8 @@ export function runeKind(rec) {
   return null;
 }
 
-/** How many property runes fit: one per point of potency. */
-export const runeSlots = (it) => Math.max(0, Math.min(3, Number(it.potency) || 0));
+/** How many property runes fit: one per point of potency; an orichalcum item always takes 4 (table rule). */
+export const runeSlots = (it) => (it && it.material && it.material.type === 'orichalcum' ? 4 : Math.max(0, Math.min(3, Number(it && it.potency) || 0)));
 
 /** The rune's own item page, for its rules text ("Greater Flaming" is the item "Flaming (Greater)"). */
 export function runeRef(db, rune) {

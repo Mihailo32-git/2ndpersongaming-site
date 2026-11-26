@@ -10,6 +10,7 @@ import { evaluate } from './expr.js';
 import { checkAll } from './prereq.js';
 import { refOf } from './data.js';
 import { CASTERS, buildSpellcasting } from './casting.js';
+import { runeSlots } from './runes.js';
 
 export const BOOST_LEVELS = [5, 10, 15, 20];
 const FEAT_PACKS = ['feats', 'classfeatures', 'ancestryfeatures'];
@@ -257,7 +258,7 @@ export class Engine {
       const rec = db.get(it.ref);
       if (!rec || rec.type !== 'armor') continue;
       const rules = [];
-      for (const slug of it.runes.slice(0, Math.max(0, Math.min(3, Number(it.potency) || 0)))) {
+      for (const slug of it.runes.slice(0, runeSlots(it))) {
         const tier = /^major/.test(slug) ? 3 : /^greater/.test(slug) ? 2 : 1;
         const base = slug.replace(/^(major|greater)/, '').replace(/^\w/, (c) => c.toLowerCase());
         const label = db.runeData?.armor?.[slug]?.name || slug;
@@ -1187,7 +1188,7 @@ export class Engine {
         // null: the rune's extra damage depends on the target (Holy: 2d4 instead of 1d4 against unholy creatures).
         const okPred = (p) => (!p || !p.length ? true : JSON.stringify(p).includes('target:') ? null : test(p, rOpts));
         const against = (p) => { const m = JSON.stringify(p).match(/target:trait:([\w-]+)/); return m ? `${m[1]} creatures` : 'some targets'; };
-        for (const slug of item.runes.slice(0, Math.max(0, Math.min(3, Number(potency) || 0)))) {
+        for (const slug of item.runes.slice(0, runeSlots({ potency, material: item.material }))) {
           const r = RD.weapon[slug];
           if (!r) continue;
           runeTags.push({ slug, name: r.name });

@@ -32,7 +32,7 @@ export function openRuneManager({ db, it, level = 20, readOnly = false, onChange
           : `<div class="rune-line"><span class="rune-lbl">Resilient</span>${seg('resilient', RESILIENT, Number(it.resilient) || 0)}</div>`}
       </div>
       <div class="rune-sec"><h3 class="inv-h">Property runes <span class="muted">${Math.min(runes.length, slots)} of ${slots}</span></h3>
-        <p class="small muted" style="margin:0 0 8px">One property rune per point of potency${slots ? '' : ': add a potency rune first'}.</p>
+        <p class="small muted" style="margin:0 0 8px">${mat.type === 'orichalcum' ? 'Orichalcum: always 4 property runes, whatever the potency' : `One property rune per point of potency${slots ? '' : ': add a potency rune first'}`}.</p>
         <div class="rune-list">${runes.map((slug, i) => { const r = table[slug]; const ref = r && runeRef(db, r); return `<div class="rune-row ${i < slots ? '' : 'off'}">
             <button type="button" class="alch-name" ${ref ? `data-rref="${esc(ref)}"` : 'disabled'}>${esc(r ? r.name : slug)}</button>
             <span class="muted small">${r ? 'Lv ' + r.level : ''}${i < slots ? '' : ` · doesn't fit (needs +${i + 1} potency)`}</span>
