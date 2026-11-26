@@ -45,14 +45,16 @@ if (sw && location.protocol !== 'file:') {
   });
 }
 
-function ask(type, onMsg) {
+function ask(type, onMsg, extra) {
   return new Promise((resolve) => {
     if (!sw || !sw.controller) { resolve(null); return; }
     const handler = (e) => { if (onMsg) onMsg(e.data); if (e.data && (e.data.type === type || e.data.type === 'downloaded')) { sw.removeEventListener('message', handler); resolve(e.data); } };
     sw.addEventListener('message', handler);
-    sw.controller.postMessage({ type: type === 'downloaded' ? 'download-text' : type });
+    sw.controller.postMessage(Object.assign({ type: type === 'downloaded' ? 'download-text' : type }, extra || {}));
   });
 }
+// The server compresses the JSON to about a third and a half; that's roughly what goes over the network.
+const mb = (bytes) => { const v = (bytes || 0) / 3.5e6; return v < 10 ? v.toFixed(1) : String(Math.round(v)); };
 
 export async function openAppPanel() {
   const m = modal('App & offline', {});
@@ -60,6 +62,7 @@ export async function openAppPanel() {
     const st = await ask('status');
     const ready = !!st;
     const allText = st && st.text >= st.textTotal;
+    const allCr = st && st.creaturesTotal && st.creatures >= st.creaturesTotal;
     m.body.innerHTML = `
       <div class="app-row"><div><b>Install on this device</b><p class="muted small">${standalone() ? 'You’re using the installed app.' : 'Opens full screen from your home screen, without the browser bar.'}</p></div>
         ${standalone() ? '<span class="badge ok-badge">Installed</span>' : installEvent ? '<button type="button" class="btn primary" id="appInstall">Install</button>' : ''}</div>
@@ -71,18 +74,23 @@ export async function openAppPanel() {
         : 'Getting the offline copy ready… open this again in a moment.'}</p></div>${ready ? '<span class="badge ok-badge">Ready</span>' : ''}</div>
       ${ready ? `<div class="app-row"><div><b>Rules text offline</b><p class="muted small">Descriptions of feats, spells, items and so on. ${allText ? 'All of it is saved on this device.' : `${st.text} of ${st.textTotal} parts saved; the rest load when you open them online.`}</p>
         <div class="app-progress" hidden><div></div></div></div>
-        ${allText ? '<span class="badge ok-badge">Saved</span>' : `<button type="button" class="btn" id="appText" ${navigator.onLine ? '' : 'disabled'}>Download all (~4.5 MB)</button>`}</div>` : ''}
+        ${allText ? '<span class="badge ok-badge">Saved</span>' : `<button type="button" class="btn" data-dl="rules" ${navigator.onLine ? '' : 'disabled'}>Download all (~${mb(st.sizes?.rules)} MB)</button>`}</div>` : ''}
+      ${ready && st.creaturesTotal ? `<div class="app-row"><div><b>Bestiary offline</b> <span class="muted small">(for GMs)</span><p class="muted small">Every creature statblock for the GM screen. ${allCr ? 'All of it is saved on this device.' : `${st.creatures} of ${st.creaturesTotal} parts saved; creatures you open online are kept too.`}</p>
+        <div class="app-progress" hidden><div></div></div></div>
+        ${allCr ? '<span class="badge ok-badge">Saved</span>' : `<button type="button" class="btn" data-dl="creatures" ${navigator.onLine ? '' : 'disabled'}>Download (~${mb(st.sizes?.creatures)} MB)</button>`}</div>` : ''}
       <p class="muted small" style="margin-top:12px">Version ${esc(st?.version || '–')}</p>`;
     const inst = m.body.querySelector('#appInstall');
     if (inst) inst.onclick = async () => { const e = installEvent; installEvent = null; e.prompt(); await e.userChoice.catch(() => null); draw(); notify(); };
-    const dl = m.body.querySelector('#appText');
-    if (dl) dl.onclick = async () => {
-      dl.disabled = true; dl.textContent = 'Downloading…';
-      const bar = m.body.querySelector('.app-progress'); bar.hidden = false;
-      const res = await ask('downloaded', (d) => { if (d && d.type === 'progress') bar.firstElementChild.style.width = Math.round((d.done / d.total) * 100) + '%'; });
-      toast(res && !res.failed ? 'Rules text saved for offline use.' : 'Some parts didn’t download; try again online.', res && !res.failed ? 'ok' : 'error');
+    m.body.querySelectorAll('[data-dl]').forEach((dl) => (dl.onclick = async () => {
+      const group = dl.dataset.dl;
+      m.body.querySelectorAll('[data-dl]').forEach((b) => (b.disabled = true));
+      dl.textContent = 'Downloading…';
+      const bar = dl.closest('.app-row').querySelector('.app-progress'); bar.hidden = false;
+      const res = await ask('downloaded', (d) => { if (d && d.type === 'progress') bar.firstElementChild.style.width = Math.round((d.done / d.total) * 100) + '%'; }, { group });
+      const what = group === 'creatures' ? 'Bestiary' : 'Rules text';
+      toast(res && !res.failed ? what + ' saved for offline use.' : 'Some parts didn’t download; try again online.', res && !res.failed ? 'ok' : 'error');
       draw();
-    };
+    }));
   };
   draw();
 }
