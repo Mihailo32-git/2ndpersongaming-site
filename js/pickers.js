@@ -110,7 +110,7 @@ export function openFeatDrawer({ engine, db, build, slot, onTake, showRare = tru
     db, items, selected: current, chips, hideDisabled: true, placeholder: 'Search feats…', onClose,
     detail: (it) => {
       const x = it.x;
-      return recDetail(it.rec, `${it.rec.prereq?.length ? `<p class="small"><b>Prerequisites</b> ${x.pre.results.map((r) => `<span class="${r.ok === false ? 'bad' : r.ok === null ? 'warn' : 'ok'}">${esc(r.text)}${r.ok === false ? ' ✗' : r.ok === null ? ' ?' : ' ✓'}</span>`).join('; ')}</p>` : ''}
+      return recDetail(it.rec, `${it.rec.prereq?.length ? `<p class="small"><b>Prerequisites</b> ${x.pre.results.map((r) => `<span class="${r.ok === false ? 'bad' : r.ok === null ? 'warn' : 'ok'}">${esc(r.text)}${r.via ? ` <span class="muted">(${esc(r.via)})</span>` : ''}${r.ok === false ? ' ✗' : r.ok === null ? ' ?' : ' ✓'}</span>`).join('; ')}</p>` : ''}
         ${x.reasons.length ? `<p class="bad small">${esc(x.reasons.join(' · '))}</p>` : ''}`);
     },
     textRef: (it) => refOf(it.rec),

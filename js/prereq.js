@@ -11,9 +11,21 @@ const SUFFIXES = [' research field', ' subconscious mind', ' conscious mind', ' 
   ' patron', ' order', ' bloodline', ' doctrine', ' mystery', ' cause', ' racket', ' style', ' innovation', ' implement'];
 const KNOWN_PACKS = ['feats', 'classfeatures', 'ancestryfeatures', 'heritages', 'ancestries', 'backgrounds', 'actions'];
 
-function rankOfTarget(target, ch) {
+// Feats that let one skill's rank stand in for others when meeting skill feat prerequisites.
+// Versatile Performance: "use your proficiency rank in Performance to meet the prerequisites of skill feats that
+// require a particular proficiency rank in Deception, Diplomacy, or Intimidation".
+const SKILL_STANDINS = [{ feat: 'versatile-performance', from: 'performance', skills: ['deception', 'diplomacy', 'intimidation'] }];
+
+function rankOfTarget(target, ch, rec = null) {
   target = target.trim().replace(/\.$/, '');
-  if (SKILLS[target] !== undefined) return ch.ranks.skills[target] || 0;
+  if (SKILLS[target] !== undefined) {
+    let r = ch.ranks.skills[target] || 0;
+    if (rec && (rec.traits || []).includes('skill')) {
+      const owned = ch.ownedSlugs || new Set((ch.items || []).map((i) => i.rec.slug));
+      for (const x of SKILL_STANDINS) if (x.skills.includes(target) && owned.has(x.feat)) r = Math.max(r, ch.ranks.skills[x.from] || 0);
+    }
+    return r;
+  }
   if (target === 'perception') return ch.ranks.perception;
   for (const s of Object.keys(SAVES)) if (target === s || target === s + ' saves' || target === s + ' save') return ch.ranks.saves[s];
   if (/^(light|medium|heavy) armor$/.test(target)) return ch.ranks.defenses[target.split(' ')[0]] || 0;
@@ -32,7 +44,7 @@ function rankOfTarget(target, ch) {
   return null;
 }
 
-function checkOne(text, ch, db) {
+function checkOne(text, ch, db, rec = null) {
   let t = text.toLowerCase().trim().replace(/\.$/, '').replace(/\s+/g, ' ');
   if (!t) return true;
 
@@ -43,11 +55,11 @@ function checkOne(text, ch, db) {
     // "trained in Acrobatics and medium armor"
     if (m[2].includes(' and ')) {
       const parts = m[2].split(/,? and |, /);
-      const res = parts.map((p) => rankOfTarget(p, ch));
+      const res = parts.map((p) => rankOfTarget(p, ch, rec));
       if (res.some((r) => r === null)) return null;
       return res.every((r) => r >= need);
     }
-    const r = rankOfTarget(m[2], ch);
+    const r = rankOfTarget(m[2], ch, rec);
     return r === null ? null : r >= need;
   }
 
@@ -78,8 +90,8 @@ function checkOne(text, ch, db) {
   return null;
 }
 
-/** text may contain alternatives: "trained in Medicine or Tian Xia Lore", "Acute Scent or scent". */
-export function checkPrereq(text, ch, db) {
+/** text may contain alternatives: "trained in Medicine or Tian Xia Lore", "Acute Scent or scent". rec: the feat being checked. */
+export function checkPrereq(text, ch, db, rec = null) {
   const t = String(text).trim();
   // Carry a rank prefix across alternatives: "trained in Crafting or Thievery"
   const rankM = t.toLowerCase().match(/^(trained|expert|master|legendary) in /);
@@ -93,15 +105,21 @@ export function checkPrereq(text, ch, db) {
   }
   let unknown = false;
   for (const a of expanded) {
-    const r = checkOne(a, ch, db);
+    const r = checkOne(a, ch, db, rec);
     if (r === true) return true;
     if (r === null) unknown = true;
   }
   return unknown ? null : false;
 }
 
-export function checkAll(prereqs, ch, db) {
-  const results = (prereqs || []).map((p) => ({ text: p, ok: checkPrereq(p, ch, db) }));
+export function checkAll(prereqs, ch, db, rec = null) {
+  const results = (prereqs || []).map((p) => ({ text: p, ok: checkPrereq(p, ch, db, rec) }));
+  // Say when a stand-in skill is what met it ("master in Intimidation" met by Performance via Versatile Performance).
+  if (rec && (rec.traits || []).includes('skill')) for (const r of results) {
+    if (r.ok !== true) continue;
+    const x = SKILL_STANDINS.find((s) => s.skills.some((k) => r.text.toLowerCase().includes(k)) && (ch.ownedSlugs || new Set()).has(s.feat));
+    if (x && checkPrereq(r.text, ch, db, null) !== true) r.via = `${x.from[0].toUpperCase() + x.from.slice(1)}, via ${(db.list('feats').find((f) => f.slug === x.feat) || {}).name || x.feat}`;
+  }
   const ok = results.every((r) => r.ok !== false);
   return { ok, unknown: results.some((r) => r.ok === null), results };
 }

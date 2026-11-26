@@ -140,7 +140,7 @@ export class Engine {
     for (const rec of db.list('feats')) {
       if (!this._fitsSlot(rec, slot, ch)) continue;
       if (q && !rec.name.toLowerCase().includes(q)) continue;
-      const pre = checkAll(rec.prereq, ch, db);
+      const pre = checkAll(rec.prereq, ch, db, rec);
       const max = rec.max ?? 1;
       const already = (taken.get(rec.slug) || 0) - (build.feats[slot.id] === rec.slug ? 1 : 0);
       const reasons = [];
@@ -1017,7 +1017,7 @@ export class Engine {
     ch.prereqProblems = [];
     if (!ch.build.options?.ignorePrereqs) {
       for (const f of ch.feats.filter((f) => f.slot)) {
-        const res = checkAll(f.rec.prereq, ch, db);
+        const res = checkAll(f.rec.prereq, ch, db, f.rec);
         if (!res.ok) ch.prereqProblems.push({ feat: f.rec.name, slot: f.slot, results: res.results });
       }
     }

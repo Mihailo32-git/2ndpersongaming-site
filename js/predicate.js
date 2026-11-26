@@ -53,7 +53,16 @@ export function test(predicate, options) {
 }
 
 /** Roll options describing an item, used when filtering ChoiceSet candidates. */
+// Records from the data files never change, so each one's options are worked out once (the engine asks for
+// them thousands of times per recalculation when it lists the choices a feat offers). Callers only read the set.
+const OPT_CACHE = new WeakMap();
 export function itemOptions(rec, pack) {
+  let byPack = OPT_CACHE.get(rec);
+  if (byPack && byPack[pack]) return byPack[pack];
+  if (!byPack) { byPack = {}; OPT_CACHE.set(rec, byPack); }
+  return (byPack[pack] = buildItemOptions(rec, pack));
+}
+function buildItemOptions(rec, pack) {
   const o = new Set();
   const typeOf = { feats: 'feat', classfeatures: 'feat', ancestryfeatures: 'feat', spells: 'spell', ancestries: 'ancestry',
     heritages: 'heritage', backgrounds: 'background', classes: 'class', actions: 'action', conditions: 'condition' };
