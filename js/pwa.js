@@ -40,6 +40,11 @@ if (sw && location.protocol !== 'file:') {
       reg.addEventListener('updatefound', () => watch(reg.installing));
       // Look for a new version now and then (tablets can stay open for a whole session).
       setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
+      // An installed app is usually resumed rather than reloaded, so also look when it comes back to the front.
+      let lastCheck = Date.now();
+      const check = () => { if (Date.now() - lastCheck < 60 * 1000) return; lastCheck = Date.now(); reg.update().catch(() => {}); };
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+      window.addEventListener('online', check);
       notify();
     } catch (e) { /* the site still works online without it */ }
   });
