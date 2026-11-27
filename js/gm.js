@@ -430,7 +430,8 @@ function alchemyHtml(ch, st) {
 function openPc(p) {
   const ch = p.ch; const h = hpOf(p);
   const m = modal(p.build.name || 'Character', { wide: true });
-  const dc = (mod) => 10 + mod;
+  // Casters show their spell DC (the class's own spellcasting first), everyone else their class DC.
+  const spellE = ch.spellcasting.entries.find((e) => e.id === 'class') || ch.spellcasting.entries[0] || null;
   const res = slotsLeft(p);
   const fmax = ch.spellcasting.focus?.max || ch.focusMax || 0;
   const daily = dailyList(ch, p.state), lim = limitedList(ch, p.state), cons = consumables(ch);
@@ -440,9 +441,9 @@ function openPc(p) {
       <div><h3 class="inv-h">Hit Points</h3><div class="gm-big"><b>${h.cur}</b><span>/ ${h.max}</span>${h.temp ? `<span class="gm-temp">+${h.temp} temp</span>` : ''}</div>${bar(h.cur, h.max, h.temp)}
         <p class="small">${p.state.dying ? `<span class="bad">Dying ${p.state.dying}</span> · ` : ''}Wounded ${p.state.wounded || 0}</p>
         ${p.state.conditions?.length ? `<div class="gm-conds">${condChips(p.state.conditions)}</div>` : '<p class="muted small">No conditions.</p>'}</div>
-      <div><h3 class="inv-h">Defenses as DCs</h3>
-        <div class="gm-dcs"><span><small>AC</small><b>${ch.ac.total}</b></span><span><small>Fortitude DC</small><b>${dc(ch.saves.fortitude.total)}</b></span><span><small>Reflex DC</small><b>${dc(ch.saves.reflex.total)}</b></span><span><small>Will DC</small><b>${dc(ch.saves.will.total)}</b></span><span><small>Perception DC</small><b>${dc(ch.perception.total)}</b></span>${ch.classDC ? `<span><small>Class DC</small><b>${ch.classDC.total}</b></span>` : ''}</div>
-        <p class="small muted">Saves ${signed(ch.saves.fortitude.total)} / ${signed(ch.saves.reflex.total)} / ${signed(ch.saves.will.total)} · Perception ${signed(ch.perception.total)} · Speed ${ch.speed?.total ?? '—'} ft</p></div>
+      <div><h3 class="inv-h">Defenses</h3>
+        <div class="gm-dcs"><span><small>AC</small><b>${ch.ac.total}</b></span><span><small>Fortitude</small><b>${signed(ch.saves.fortitude.total)}</b></span><span><small>Reflex</small><b>${signed(ch.saves.reflex.total)}</b></span><span><small>Will</small><b>${signed(ch.saves.will.total)}</b></span><span><small>Perception</small><b>${signed(ch.perception.total)}</b></span>${spellE ? `<span><small>Spell DC</small><b>${spellE.dc}</b></span>` : ch.classDC ? `<span><small>Class DC</small><b>${ch.classDC.total}</b></span>` : ''}</div>
+        <p class="small muted">Speed ${ch.speed?.total ?? '—'} ft</p></div>
       <div><h3 class="inv-h">Resources</h3>
         <p class="small">Hero points <b>${p.state.hero || 0}</b>${fmax ? ` · Focus <b>${p.state.focus ?? fmax}/${fmax}</b>` : ''}</p>
         ${res.map((e) => `<p class="small"><span class="muted">${esc(e.label)}</span><br>${Object.entries(e.ranks).map(([r, [l, t]]) => `<span class="gm-slot ${l ? '' : 'out'}">${ordinal(r)} <b>${l}</b>/${t}</span>`).join(' ')}</p>`).join('') || (ch.spellcasting?.any || !alchemyInfo(ch, p.state || {}).vials ? '<p class="muted small">No spell slots.</p>' : '')}
