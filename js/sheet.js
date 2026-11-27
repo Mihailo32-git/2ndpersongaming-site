@@ -614,78 +614,122 @@ function staffHtml(it) {
   if (spont) h += `<p class="small muted">${esc(spont.label)}: you can also cast a staff spell by spending 1 charge and one of your spell slots of the spell’s rank (<b>1 + slot</b>).</p>`;
   return h + `</section>`;
 }
+let spellTab = (() => { try { return sessionStorage.getItem('pf2e.spellTab') || ''; } catch (e) { return ''; } })();
 TAB_RENDER.spells = (el) => {
   const sc = ch.spellcasting;
-  let html = '';
-  for (const e of sc.entries) {
-    const used = state.used[e.id] || {};
-    html += `<section class="card" style="background:transparent"><div class="sc-head"><h3>${esc(e.label)}</h3><div class="sc-stats"><span class="sc-stat">${esc(titleCase(e.trad || '—'))} ${esc(e.type)}</span><span class="sc-stat">Attack<b>${signed(e.attack)}</b></span><span class="sc-stat">DC<b>${e.dc}</b></span></div></div>`;
-    if (e.note) html += `<p class="small muted">${esc(e.note)}</p>`;
-    if (e.type === 'prepared') {
-      const prep = state.prep[e.id] || {};
-      const rows = slotRows(e);
-      const byRank = {};
-      for (const r of rows) (byRank[r.rank] = byRank[r.rank] || []).push(r);
-      for (const [rank, list] of Object.entries(byRank)) {
-        html += `<div class="rank-block"><div class="rank-head"><span class="rk">${rank === '0' ? 'Cantrips' : ordinal(rank)}</span>${rank === '0' ? `<span class="small muted">heightened to ${sc.cantripRank}</span>` : `<span class="small muted">${list.filter((x) => prep[x.id]?.cast).length} of ${list.length} cast</span>`}</div>`;
-        for (const row of list) {
-          const p = prep[row.id];
-          const rec = p?.ref ? db.get(p.ref) : null;
-          const kind = row.kind !== 'normal' ? `<span class="slot-kind">${esc(row.label)}</span>` : '';
-          if (rec) {
-            html += spellRow({ ref: p.ref, rec }, {
-              cast: rank !== '0' && p.cast, extra: kind + (rec.rank < Number(rank) && !isCantrip(rec) ? ` <span class="badge">heightened ${ordinal(rank)}</span>` : ''),
-              actions: readOnly ? '' : `${rank !== '0' ? `<button type="button" class="btn small ${p.cast ? '' : 'primary'}" data-cast='${esc(JSON.stringify({ e: e.id, s: row.id }))}'>${p.cast ? 'Undo' : 'Cast'}</button>` : ''}<button type="button" class="icon-btn" data-prep='${esc(JSON.stringify({ e: e.id, s: row.id, rank: row.rank, kind: row.kind }))}' aria-label="Change prepared spell">✎</button>`,
-            });
-          } else {
-            html += `<div class="prep-slot">${kind}<span class="empty">Empty slot</span><span class="grow"></span>${readOnly ? '' : `<button type="button" class="btn small" data-prep='${esc(JSON.stringify({ e: e.id, s: row.id, rank: row.rank, kind: row.kind }))}'>Prepare</button>`}</div>`;
+  // One sub-tab per source of spells (class, each archetype, focus, innate, each staff in hand), like the action tabs.
+  const entryHtml = (e) => {
+    let html = '';
+      const used = state.used[e.id] || {};
+      html += `<section class="card" style="background:transparent"><div class="sc-head"><h3>${esc(e.label)}</h3><div class="sc-stats"><span class="sc-stat">${esc(titleCase(e.trad || '—'))} ${esc(e.type)}</span><span class="sc-stat">Attack<b>${signed(e.attack)}</b></span><span class="sc-stat">DC<b>${e.dc}</b></span>${e.psiCantrips?.length ? `<span class="sc-stat">Focus points<b>${state.focus}/${sc.focus.max || ch.focusMax}</b></span>` : ''}</div></div>`;
+      if (e.note) html += `<p class="small muted">${esc(e.note)}</p>`;
+      if (e.type === 'prepared') {
+        const prep = state.prep[e.id] || {};
+        const rows = slotRows(e);
+        const byRank = {};
+        for (const r of rows) (byRank[r.rank] = byRank[r.rank] || []).push(r);
+        for (const [rank, list] of Object.entries(byRank)) {
+          html += `<div class="rank-block"><div class="rank-head"><span class="rk">${rank === '0' ? 'Cantrips' : ordinal(rank)}</span>${rank === '0' ? `<span class="small muted">heightened to ${sc.cantripRank}</span>` : `<span class="small muted">${list.filter((x) => prep[x.id]?.cast).length} of ${list.length} cast</span>`}</div>`;
+          for (const row of list) {
+            const p = prep[row.id];
+            const rec = p?.ref ? db.get(p.ref) : null;
+            const kind = row.kind !== 'normal' ? `<span class="slot-kind">${esc(row.label)}</span>` : '';
+            if (rec) {
+              html += spellRow({ ref: p.ref, rec }, {
+                cast: rank !== '0' && p.cast, extra: kind + (rec.rank < Number(rank) && !isCantrip(rec) ? ` <span class="badge">heightened ${ordinal(rank)}</span>` : ''),
+                actions: readOnly ? '' : `${rank !== '0' ? `<button type="button" class="btn small ${p.cast ? '' : 'primary'}" data-cast='${esc(JSON.stringify({ e: e.id, s: row.id }))}'>${p.cast ? 'Undo' : 'Cast'}</button>` : ''}<button type="button" class="icon-btn" data-prep='${esc(JSON.stringify({ e: e.id, s: row.id, rank: row.rank, kind: row.kind }))}' aria-label="Change prepared spell">✎</button>`,
+              });
+            } else {
+              html += `<div class="prep-slot">${kind}<span class="empty">Empty slot</span><span class="grow"></span>${readOnly ? '' : `<button type="button" class="btn small" data-prep='${esc(JSON.stringify({ e: e.id, s: row.id, rank: row.rank, kind: row.kind }))}'>Prepare</button>`}</div>`;
+            }
           }
+          html += `</div>`;
         }
-        html += `</div>`;
+        if (e.granted?.length) html += `<div class="rank-block"><div class="rank-head"><span class="rk">Granted</span></div>${e.granted.map((g) => spellRow(g, { extra: ` <span class="badge">${g.rank ? ordinal(g.rank) : 'cantrip'} · ${esc(g.source)}</span>` })).join('')}</div>`;
+      } else {
+        const ranks = new Set([0, ...Object.keys(e.slots).map(Number), ...Object.keys(e.repertoire || {}).map(Number)]);
+        if (e.psiCantrips?.length) html += `<div class="rank-block"><div class="rank-head"><span class="rk">Psi</span><span class="small muted">spend 1 Focus Point to amp · tap a cantrip to read its amp</span></div>${e.psiCantrips.map((p) => spellRow(p, { extra: p.unique ? ' <span class="badge accent">unique</span>' : '' })).join('')}</div>`;
+        for (const rank of [...ranks].sort((a, b) => a - b)) {
+          const n = e.slots[rank] || 0;
+          const list = (e.repertoire || {})[rank] || [];
+          if (!n && !list.length && rank !== 0) continue;
+          const u = used[rank] || 0;
+          html += `<div class="rank-block"><div class="rank-head"><span class="rk">${rank === 0 ? 'Cantrips' : ordinal(rank)}</span>
+            ${rank === 0 ? `<span class="small muted">heightened to ${sc.cantripRank}</span>` : `<span class="slot-pips" aria-label="${n - u} of ${n} slots left">${Array.from({ length: n }, (_, i) => `<button type="button" class="${i < u ? 'used' : ''}" data-slot='${esc(JSON.stringify({ e: e.id, r: rank, i }))}' aria-label="Slot ${i + 1}${i < u ? ' (used)' : ''}" ${readOnly ? 'disabled' : ''}></button>`).join('')}</span><span class="small muted">${n - u}/${n}</span>`}</div>
+            ${list.map((s) => spellRow(s, { extra: (s.granted ? ' <span class="badge">granted</span>' : '') + ((e.signature || []).includes(s.ref) ? ' <span class="badge accent">signature</span>' : '') })).join('') || (rank > 0 ? '<p class="small muted" style="padding-left:74px;margin:2px 0">No spells of this rank in your repertoire — signature spells and heightening still use these slots.</p>' : '<p class="small muted" style="padding-left:74px;margin:2px 0">None.</p>')}</div>`;
+        }
+        const sigs = (e.signature || []).map((r) => db.get(r)).filter(Boolean);
+        if (sigs.length) html += `<p class="small muted">Signature spells: ${sigs.map((s) => esc(s.name)).join(', ')} — cast them with any slot of their rank or higher.</p>`;
       }
-      if (e.granted?.length) html += `<div class="rank-block"><div class="rank-head"><span class="rk">Granted</span></div>${e.granted.map((g) => spellRow(g, { extra: ` <span class="badge">${g.rank ? ordinal(g.rank) : 'cantrip'} · ${esc(g.source)}</span>` })).join('')}</div>`;
-    } else {
-      const ranks = new Set([0, ...Object.keys(e.slots).map(Number), ...Object.keys(e.repertoire || {}).map(Number)]);
-      if (e.psiCantrips?.length) html += `<div class="rank-block"><div class="rank-head"><span class="rk">Psi</span><span class="small muted">spend 1 Focus Point to amp · tap a cantrip to read its amp</span></div>${e.psiCantrips.map((p) => spellRow(p, { extra: p.unique ? ' <span class="badge accent">unique</span>' : '' })).join('')}</div>`;
-      for (const rank of [...ranks].sort((a, b) => a - b)) {
-        const n = e.slots[rank] || 0;
-        const list = (e.repertoire || {})[rank] || [];
-        if (!n && !list.length && rank !== 0) continue;
-        const u = used[rank] || 0;
-        html += `<div class="rank-block"><div class="rank-head"><span class="rk">${rank === 0 ? 'Cantrips' : ordinal(rank)}</span>
-          ${rank === 0 ? `<span class="small muted">heightened to ${sc.cantripRank}</span>` : `<span class="slot-pips" aria-label="${n - u} of ${n} slots left">${Array.from({ length: n }, (_, i) => `<button type="button" class="${i < u ? 'used' : ''}" data-slot='${esc(JSON.stringify({ e: e.id, r: rank, i }))}' aria-label="Slot ${i + 1}${i < u ? ' (used)' : ''}" ${readOnly ? 'disabled' : ''}></button>`).join('')}</span><span class="small muted">${n - u}/${n}</span>`}</div>
-          ${list.map((s) => spellRow(s, { extra: (s.granted ? ' <span class="badge">granted</span>' : '') + ((e.signature || []).includes(s.ref) ? ' <span class="badge accent">signature</span>' : '') })).join('') || (rank > 0 ? '<p class="small muted" style="padding-left:74px;margin:2px 0">No spells of this rank in your repertoire — signature spells and heightening still use these slots.</p>' : '<p class="small muted" style="padding-left:74px;margin:2px 0">None.</p>')}</div>`;
-      }
-      const sigs = (e.signature || []).map((r) => db.get(r)).filter(Boolean);
-      if (sigs.length) html += `<p class="small muted">Signature spells: ${sigs.map((s) => esc(s.name)).join(', ')} — cast them with any slot of their rank or higher.</p>`;
-    }
-    html += `</section>`;
-  }
+      html += `</section>`;
+    return html;
+  };
   const f = sc.focus;
-  if (f.spells.length || f.cantrips.length) {
-    html += `<section class="card" style="background:transparent"><div class="sc-head"><h3>Focus spells</h3><div class="sc-stats"><span class="sc-stat">Focus points<b>${state.focus}/${f.max || ch.focusMax}</b></span></div></div>
-      ${f.cantrips.map((s) => spellRow(s, { extra: ` <span class="badge">cantrip</span> <span class="small muted">${esc(s.source)} · DC ${s.dc} · ${signed(s.attack)}</span>` })).join('')}
-      ${f.spells.map((s) => spellRow(s, { extra: ` <span class="small muted">${esc(s.source)} · DC ${s.dc} · ${signed(s.attack)}</span>`, actions: readOnly ? '' : `<button type="button" class="btn small" data-focuscast ${state.focus > 0 ? '' : 'disabled'}>Cast (1 FP)</button>` })).join('')}</section>`;
+  const focusHtml = () => {
+    let html = '';
+    if (f.spells.length || f.cantrips.length) {
+      html += `<section class="card" style="background:transparent"><div class="sc-head"><h3>Focus spells</h3><div class="sc-stats"><span class="sc-stat">Focus points<b>${state.focus}/${f.max || ch.focusMax}</b></span></div></div>
+        ${f.cantrips.map((s) => spellRow(s, { extra: ` <span class="badge">cantrip</span> <span class="small muted">${esc(s.source)} · DC ${s.dc} · ${signed(s.attack)}</span>` })).join('')}
+        ${f.spells.map((s) => spellRow(s, { extra: ` <span class="small muted">${esc(s.source)} · DC ${s.dc} · ${signed(s.attack)}</span>`, actions: readOnly ? '' : `<button type="button" class="btn small" data-focuscast ${state.focus > 0 ? '' : 'disabled'}>Cast (1 FP)</button>` })).join('')}</section>`;
+    }
+    return html;
+  };
+  const innateHtml = (innate, title) => {
+    let html = '';
+    const unpickedInnate = innate.filter((s) => s.pickFor && !s.rec);
+    if (innate.some((s) => s.rec) || unpickedInnate.length) {
+      html += `<section class="card" style="background:transparent"><div class="sc-head"><h3>${esc(title)}</h3></div>
+        ${unpickedInnate.length ? `<p class="notice small">${esc([...new Set(unpickedInnate.map((s) => s.source))].join(', '))}: ${unpickedInnate.map((s) => ordinal(s.rank)).join(', ')}-rank spell${unpickedInnate.length > 1 ? 's' : ''} not chosen yet. ${readOnly ? '' : `<a href="builder.html?id=${encodeURIComponent(charRec.id)}">Pick ${unpickedInnate.length > 1 ? 'them' : 'it'} in the builder</a> (Spells step).`}</p>` : ''}
+        ${innate.filter((s) => s.rec).map((s) => {
+          const c = isCantrip(s.rec);
+          const max = s.perDay || 1;
+          const u = Math.min(max, innateUsedCount(state, s.ref));
+          const usedToday = u >= max;
+          // More than once a day (Captivating Intensity): one pip per cast, like spell slots.
+          const acts = c || readOnly ? '' : max > 1
+            ? `<span class="slot-pips" aria-label="${max - u} of ${max} left today">${Array.from({ length: max }, (_, i) => `<button type="button" class="${i < u ? 'used' : ''}" data-innatepip='${esc(JSON.stringify({ r: s.ref, i }))}' aria-label="Cast ${i + 1}${i < u ? ' (used)' : ''}"></button>`).join('')}</span><span class="small muted">${max - u}/${max}</span>`
+            : `<button type="button" class="btn small" data-innate="${esc(s.ref)}">${usedToday ? 'Undo' : 'Cast'}</button>`;
+          return spellRow(s, { cast: !c && usedToday, extra: ` <span class="badge">${c ? 'cantrip' : ordinal(s.rank) + ' · ' + max + '/day'}</span> <span class="small muted">${esc(s.source)} · DC ${s.dc}</span>`, actions: acts });
+        }).join('')}</section>`;
+    }
+    return html;
+  };
+  const tabs = [];
+  const entryTab = (e) => {
+    const n = e.type === 'prepared'
+      ? Object.values(state.prep[e.id] || {}).filter((p) => p && p.ref).length + (e.granted || []).length
+      : Object.values(e.repertoire || {}).reduce((a, l) => a + l.length, 0) + (e.psiCantrips || []).length;
+    const label = e.source === 'archetype' ? e.label.replace(/ archetype$/i, '') : e.label.replace(/ spells$/i, '');
+    tabs.push({ id: 'e:' + e.id, label, n, arch: e.arch || null, html: () => entryHtml(e) });
+  };
+  // Class first, then focus spells (mostly from the class), then archetypes.
+  sc.entries.filter((e) => e.source !== 'archetype').forEach(entryTab);
+  if (f.spells.length || f.cantrips.length) tabs.push({ id: 'focus', label: 'Focus', n: f.spells.length + f.cantrips.length, html: focusHtml });
+  sc.entries.filter((e) => e.source === 'archetype').forEach(entryTab);
+  // Innate spells go with the archetype that grants them (Captivator); the rest share an Innate tab.
+  const groups = new Map();
+  for (const s of sc.innate) {
+    const feat = s.pickFor?.feat ? db.get('@feats/' + s.pickFor.feat) : null;
+    const key = feat?.arch || 'innate';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(s);
   }
-  const unpickedInnate = sc.innate.filter((s) => s.pickFor && !s.rec);
-  if (sc.innate.some((s) => s.rec) || unpickedInnate.length) {
-    html += `<section class="card" style="background:transparent"><div class="sc-head"><h3>Innate spells</h3></div>
-      ${unpickedInnate.length ? `<p class="notice small">${esc([...new Set(unpickedInnate.map((s) => s.source))].join(', '))}: ${unpickedInnate.map((s) => ordinal(s.rank)).join(', ')}-rank spell${unpickedInnate.length > 1 ? 's' : ''} not chosen yet. ${readOnly ? '' : `<a href="builder.html?id=${encodeURIComponent(charRec.id)}">Pick ${unpickedInnate.length > 1 ? 'them' : 'it'} in the builder</a> (Spells step).`}</p>` : ''}
-      ${sc.innate.filter((s) => s.rec).map((s) => {
-        const c = isCantrip(s.rec);
-        const max = s.perDay || 1;
-        const u = Math.min(max, innateUsedCount(state, s.ref));
-        const usedToday = u >= max;
-        // More than once a day (Captivating Intensity): one pip per cast, like spell slots.
-        const acts = c || readOnly ? '' : max > 1
-          ? `<span class="slot-pips" aria-label="${max - u} of ${max} left today">${Array.from({ length: max }, (_, i) => `<button type="button" class="${i < u ? 'used' : ''}" data-innatepip='${esc(JSON.stringify({ r: s.ref, i }))}' aria-label="Cast ${i + 1}${i < u ? ' (used)' : ''}"></button>`).join('')}</span><span class="small muted">${max - u}/${max}</span>`
-          : `<button type="button" class="btn small" data-innate="${esc(s.ref)}">${usedToday ? 'Undo' : 'Cast'}</button>`;
-        return spellRow(s, { cast: !c && usedToday, extra: ` <span class="badge">${c ? 'cantrip' : ordinal(s.rank) + ' · ' + max + '/day'}</span> <span class="small muted">${esc(s.source)} · DC ${s.dc}</span>`, actions: acts });
-      }).join('')}</section>`;
+  for (const [key, list] of groups) {
+    if (!list.some((s) => s.rec || s.pickFor)) continue;
+    const name = titleCase(key.replace(/-/g, ' '));
+    const n = list.filter((s) => s.rec).length;
+    const title = key === 'innate' ? 'Innate spells' : `${name} innate spells`;
+    const host = key !== 'innate' && tabs.find((t) => t.arch === key);
+    if (host) { const prev = host.html; host.html = () => prev() + innateHtml(list, title); host.n += n; }
+    else tabs.push({ id: 'innate:' + key, label: key === 'innate' ? 'Innate' : name, n, html: () => innateHtml(list, title) });
   }
-  for (const it of wieldedStaves()) html += staffHtml(it);
-  if (!html) html = '<p class="muted">No spells yet. Pick them in the builder.</p>';
-  el.innerHTML = html;
+  const staves = wieldedStaves();
+  staves.forEach((it, i) => tabs.push({ id: 'staff:' + it.id, label: 'Staff' + (staves.length > 1 ? ' ' + (i + 1) : ''), title: it.rec.name,
+    n: it.rec.staffSpells.reduce((a, [, refs]) => a + refs.length, 0), html: () => staffHtml(it) }));
+  if (!tabs.length) { el.innerHTML = '<p class="muted">No spells yet. Pick them in the builder.</p>'; return; }
+  const cur = tabs.find((t) => t.id === spellTab) || tabs[0];
+  el.innerHTML = (tabs.length > 1 ? `<div class="act-seg spell-seg" role="tablist" aria-label="Sources of spells">${tabs.map((t) => `<button type="button" role="tab" data-spelltab="${esc(t.id)}" aria-selected="${t === cur}"${t.title ? ` title="${esc(t.title)}"` : ''}>${esc(t.label)} <span class="n">${t.n}</span></button>`).join('')}</div>` : '') + cur.html();
+  $$('[data-spelltab]', el).forEach((b) => (b.onclick = () => { spellTab = b.dataset.spelltab; try { sessionStorage.setItem('pf2e.spellTab', spellTab); } catch (err) { /* ignore */ } TAB_RENDER.spells(el); }));
   if (readOnly) return;
   $$('[data-slot]', el).forEach((b) => (b.onclick = () => {
     const o = JSON.parse(b.dataset.slot);

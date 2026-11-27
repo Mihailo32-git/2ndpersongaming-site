@@ -1468,3 +1468,5 @@ html[data-theme="light"] .badge.rune-badge { color: #6d28d9; background: rgba(12
 .act-extras .act-x-h:not(:first-child) { margin-top: 14px; }
 .act-extras .psi-amp { margin-bottom: 8px; }
 .act-extras .psi-amp p { margin: 0 0 6px; }
+/* Spells tab: one sub-tab per source of spells */
+.spell-seg { margin: 0 0 12px; flex-wrap: wrap; }
