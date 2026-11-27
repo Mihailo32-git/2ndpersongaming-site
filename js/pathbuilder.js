@@ -200,7 +200,10 @@ export function convertPathbuilder(data, db, engine) {
   // ---------------------------------------------------------------- choices inside items
   const allText = new Set();
   const textOrder = [];
-  const addText = (s) => { if (!s) return; const inner = String(s).match(/\(([^)]+)\)\s*$/); if (inner) { textOrder.push(norm(inner[1])); allText.add(norm(inner[1])); } textOrder.push(norm(String(s).replace(/^[^:]+:\s*/, ''))); allText.add(norm(s)); const after = String(s).replace(/^[^:]+:\s*/, ''); allText.add(norm(after)); allText.add(norm(after.replace(/\s*\([^)]*\)\s*$/, ''))); };
+  // Older names Pathbuilder still uses for things the remaster renamed.
+  const OLD_NAMES = { 'superstitious instinct': 'superstition instinct' };
+  const addText0 = (s) => { const n = norm(s); if (OLD_NAMES[n]) { textOrder.push(OLD_NAMES[n]); allText.add(OLD_NAMES[n]); } };
+  const addText = (s) => { addText0(s); if (!s) return; const inner = String(s).match(/\(([^)]+)\)\s*$/); if (inner) { textOrder.push(norm(inner[1])); allText.add(norm(inner[1])); } textOrder.push(norm(String(s).replace(/^[^:]+:\s*/, ''))); allText.add(norm(s)); const after = String(s).replace(/^[^:]+:\s*/, ''); allText.add(norm(after)); allText.add(norm(after.replace(/\s*\([^)]*\)\s*$/, ''))); };
   for (const f of feats) { addText(f[0]); addText(f[1]); }
   for (const s of pb.specials || []) addText(s);
   addText(pb.deity); addText(pb.heritage); addText(paren(pb.background));

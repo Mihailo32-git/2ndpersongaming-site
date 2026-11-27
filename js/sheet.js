@@ -196,6 +196,7 @@ function statModal(key) {
     m.body.innerHTML = `<table class="stat-table"><tr><td>${esc(label)}</td><td class="mod">${isDC ? value : signed(value)}</td></tr>
       ${(stat.mods || []).map((x) => `<tr class="${x.situational ? 'sit-mod' : ''}"><td>${esc(x.label)} <span class="muted small">${esc(x.type)}${x.situational ? ' · situational, on' : ''}</span></td><td class="mod">${signed(x.value)}</td></tr>`).join('')}
       <tr><th>Total</th><th class="mod">${isDC ? stat.total : signed(stat.total)}</th></tr></table>
+      ${(stat.degree || []).length ? `<div class="degree-notes">${stat.degree.map((d) => `<p class="small"><b>${esc(d.label)}.</b> ${esc(d.text)}${d.conditional ? ' <span class="muted">(only in some cases)</span>' : ''}</p>`).join('')}</div>` : ''}
       ${notes.length ? `<h4 style="margin-top:14px">Situational</h4>
         <p class="muted small" style="margin-top:0">${readOnly ? 'Ticked ones are on.' : 'Tick one while it applies: it counts until you untick it.'}</p>
         <div class="sit-list">${notes.map((n) => `<label class="sit-row ${n.on ? 'on' : ''}"><input type="checkbox" data-sit="${esc(n.id)}" ${n.on ? 'checked' : ''} ${readOnly ? 'disabled' : ''}>
@@ -872,7 +873,7 @@ function wireRunesShop(el) {
   $$('[data-runes]', el).forEach((b) => (b.onclick = (e) => {
     e.stopPropagation();
     const it = build.inventory.find((x) => x.id === b.dataset.runes); if (!it) return;
-    openRuneManager({ db, it, level: ch.level, readOnly, onChange: () => { saveBuild(); change(); } });
+    openRuneManager({ db, it, level: ch.level, readOnly, giant: ch.ownedSlugs.has('giant-instinct'), onChange: () => { saveBuild(); change(); } });
   }));
   $$('[data-shop]', el).forEach((b) => (b.onclick = openShop));
 }

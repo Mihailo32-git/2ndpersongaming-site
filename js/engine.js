@@ -828,24 +828,33 @@ export class Engine {
       sel = Array.isArray(sel) ? sel : [sel];
       if (!sel.some((s) => selectors.includes(s))) continue;
       let value = this._value(ch, inst, r.value);
-      // AdjustModifier rules can raise/override a modifier with the same slug (e.g. Furious Footfalls while raging)
+      let adjType = null;
+      // AdjustModifier rules can raise/override a modifier with the same slug (Furious Footfalls while raging; an
+      // instinct raising Rage damage). They match the roll's selectors; "{item|_id}-damage" ones only the Strikes that
+      // item grants (Animal instinct's jaws). Applied by priority, so Rage's "half with agile" comes last.
       if (r.slug) {
-        for (const { r: a, inst: ai } of ch.rules) {
-          if (a.key !== 'AdjustModifier' || a.slug !== r.slug) continue;
-          const asel = [].concat(a.selector || [], a.selectors || []);
-          if (!asel.some((x) => sel.includes(x))) continue;
+        const adj = ch.rules.filter(({ r: a }) => a.key === 'AdjustModifier' && a.slug === r.slug)
+          .sort((x, y) => (x.r.priority ?? 50) - (y.r.priority ?? 50));
+        for (const { r: a, inst: ai } of adj) {
+          const asel = [].concat(this._subst(a.selector, ch, ai) || [], this._subst(a.selectors, ch, ai) || []);
+          if (!asel.some((x) => sel.includes(x) || selectors.includes(x))) continue;
+          if (asel.some((x) => /\{item\|/.test(x)) && !opts.has('strike-source:' + ai.rec.slug)) continue;
           if (a.predicate && a.predicate.length && !test(this._subst(a.predicate, ch, ai), opts)) continue;
           const av = this._value(ch, ai, a.value);
+          const before = value;
           if (a.mode === 'upgrade') value = Math.max(value, av);
           else if (a.mode === 'downgrade') value = Math.min(value, av);
           else if (a.mode === 'override') value = av;
           else if (a.mode === 'add') value += av;
           else if (a.mode === 'multiply') value = Math.trunc(value * av);
+          const dt = a.damageType ? this._subst(a.damageType, ch, ai) : null;
+          if (dt && typeof dt === 'string' && !dt.includes('{') && (value !== before || a.mode !== 'multiply')) adjType = dt;
         }
       }
       if (!value) continue;
       const mod = { label: r.label || inst.rec.name, value, type: r.type || 'untyped', source: inst.rec.name };
       if (r.damageType && typeof r.damageType === 'string' && !r.damageType.includes('{')) mod.damageType = r.damageType;
+      if (adjType) mod.damageType = adjType;
       if (r.damageCategory) mod.category = r.damageCategory;
       if (r.slug) mod.slug = r.slug;
       if (r.predicate && r.predicate.length) {
@@ -868,6 +877,9 @@ export class Engine {
     ch.toggles = [];
     for (const { r, inst } of ch.rules) {
       if (r.key !== 'RollOption' || !r.strikeToggle || !r.option || ch.toggles.some((t) => t.option === r.option)) continue;
+      const tOpts = new Set([...ch.options, ...ch.stateOptions]);
+      if (r.predicate && !test(this._subst(r.predicate, ch, inst), tOpts)) continue;
+      if (r.disabledIf && test(this._subst(r.disabledIf, ch, inst), tOpts)) continue; // e.g. not raging
       const label = r.label && !/^PF2E\./.test(r.label) ? r.label : inst.rec.name;
       const subs = Array.isArray(r.suboptions) ? r.suboptions.filter((x) => x && x.value).map((x) => ({ value: x.value, label: x.label && !/^PF2E\./.test(x.label) ? x.label : titleCase(x.value) })) : [];
       const v = (state.toggles || {})[r.option];
@@ -917,29 +929,54 @@ export class Engine {
     {
       const cat = armor ? armor.rec.cat : 'unarmored';
       const rank = R.defenses[cat] || 0;
-      const dexCap = armor?.rec.dexCap ?? 99;
+      let dexCap = armor?.rec.dexCap ?? 99;
+      for (const { r, inst } of ch.rules) {
+        if (r.key !== 'DexterityModifierCap' || (r.predicate && !test(this._subst(r.predicate, ch, inst), new Set([...ch.options, ...(ch.stateOptions || [])])))) continue;
+        const v = Number(this._value(ch, inst, r.value));
+        if (Number.isFinite(v)) dexCap = Math.min(dexCap, v);
+      }
       const dex = Math.min(A.dex, dexCap);
       const item = armor ? (armor.rec.ac || 0) + (armor.potency || armor.rec.runes?.potency || 0) : 0;
       const { mods, notes } = statMods('ac', 'dex');
       if (item) mods.push({ label: armor.rec.name, value: item, type: 'item' });
+      if (state.raging && ch.class?.slug === 'barbarian') mods.push({ label: 'Rage', value: -1, type: 'untyped' });
       if (shield && state.shieldRaised) mods.push({ label: shield.rec.name + ' (raised)', value: shield.rec.shieldAc || 2, type: 'circumstance' });
       const s = stackMods(mods);
       ch.ac = { total: 10 + dex + rankBonus(rank, L) + s.total, rank, dex, dexCap: armor ? dexCap : null, mods: s.used, notes, category: cat };
     }
-    // Saves
+    // Better (or worse) results on a save: Juggernaut, Evasion, Dogged Will ("a success becomes a critical success").
+    const DEG = { criticalSuccess: 'critical success', success: 'success', failure: 'failure', criticalFailure: 'critical failure' };
+    const ORDER = ['criticalFailure', 'failure', 'success', 'criticalSuccess'];
+    const degreeNotes = (selectors) => {
+      const out = [];
+      const o = new Set([...ch.options, ...(ch.stateOptions || [])]);
+      for (const { r, inst } of ch.rules) {
+        if (r.key !== 'AdjustDegreeOfSuccess' || !selectors.includes(r.selector)) continue;
+        const pred = this._subst(r.predicate || [], ch, inst);
+        const known = !pred.length || test(pred, o);
+        const parts = Object.entries(r.adjustment || {}).map(([from, how]) => {
+          const i = ORDER.indexOf(from);
+          const to = how === 'one-degree-better' ? ORDER[Math.min(3, i + 1)] : how === 'one-degree-worse' ? ORDER[Math.max(0, i - 1)]
+            : how === 'two-degrees-better' ? ORDER[Math.min(3, i + 2)] : ({ 'to-critical-success': 'criticalSuccess', 'to-success': 'success', 'to-failure': 'failure', 'to-critical-failure': 'criticalFailure' })[how];
+          return DEG[from] && DEG[to] ? `${DEG[from][0].toUpperCase() + DEG[from].slice(1)} → ${DEG[to]}` : null;
+        }).filter(Boolean);
+        if (parts.length) out.push({ label: inst.rec.name, text: parts.join('; '), conditional: !known });
+      }
+      return out;
+    };
     ch.saves = {};
     for (const [save, attr] of Object.entries(SAVES)) {
       const { mods, notes } = statMods(save, attr, ['saving-throw']);
       const res = armor ? (armor.resilient || armor.rec.runes?.resilient || 0) : 0;
       if (res) mods.push({ label: 'Resilient rune', value: res, type: 'item' });
       const s = stackMods(mods);
-      ch.saves[save] = { total: A[attr] + rankBonus(R.saves[save], L) + s.total, rank: R.saves[save], attr, mods: s.used, notes };
+      ch.saves[save] = { total: A[attr] + rankBonus(R.saves[save], L) + s.total, rank: R.saves[save], attr, mods: s.used, notes, degree: degreeNotes([save, 'saving-throw']) };
     }
     // Perception & initiative
     {
       const { mods, notes } = statMods('perception', 'wis');
       const s = stackMods(mods);
-      ch.perception = { total: A.wis + rankBonus(R.perception, L) + s.total, rank: R.perception, mods: s.used, notes };
+      ch.perception = { total: A.wis + rankBonus(R.perception, L) + s.total, rank: R.perception, mods: s.used, notes, degree: degreeNotes(['perception']) };
       const ini = this._mods(ch, ['initiative'], state);
       const si = stackMods([...mods, ...ini.mods]);
       ch.initiative = { total: A.wis + rankBonus(R.perception, L) + si.total, notes: ini.notes };
@@ -986,8 +1023,11 @@ export class Engine {
     // Senses
     const senses = [];
     if (ch.ancestry?.vision && ch.ancestry.vision !== 'normal') senses.push({ type: ch.ancestry.vision, source: ch.ancestry.name });
+    // Live state (raging, switches) counts too: Acute Vision's darkvision, raging resistance, Animal instinct attacks.
+    const live = new Set([...ch.options, ...(ch.stateOptions || [])]);
+    ch.liveOptions = live;
     for (const { r, inst } of ch.rules.filter((x) => x.r.key === 'Sense')) {
-      if (r.predicate && !test(this._subst(r.predicate, ch, inst), ch.options)) continue;
+      if (r.predicate && !test(this._subst(r.predicate, ch, inst), live)) continue;
       senses.push({ type: r.selector, acuity: r.acuity, range: r.range, source: inst.rec.name });
     }
     senses.push(...ch.senses);
@@ -1013,8 +1053,21 @@ export class Engine {
     }
     // Resistances etc.
     ch.defensesList = ch.rules.filter((x) => ['Resistance', 'Weakness', 'Immunity'].includes(x.r.key))
-      .filter((x) => !x.r.predicate || test(this._subst(x.r.predicate, ch, x.inst), ch.options))
-      .map((x) => ({ kind: x.r.key, type: [].concat(x.r.type || []).join(', '), value: x.r.value != null ? this._value(ch, x.inst, x.r.value) : null, source: x.inst.rec.name }));
+      .filter((x) => !x.r.predicate || test(this._subst(x.r.predicate, ch, x.inst), live))
+      .map((x) => {
+        // Types still waiting on a choice ("{item|…dragon.damageType}") are left out until it's made.
+        let types = [].concat(this._subst(x.r.type || [], ch, x.inst)).filter((t) => typeof t === 'string' && !t.includes('{'));
+        if (types.includes('custom')) {
+          let label = this._subst(x.r.label || '', ch, x.inst);
+          if (!label || /^PF2E\.|\{/.test(label)) {
+            // Superstition: "divine and primal spells", from the choice the label stands for.
+            const tr = (JSON.stringify(this._subst(x.r.definition || [], ch, x.inst)).match(/item:trait:([a-z-]+)/g) || []).map((t) => t.slice(11));
+            label = tr.length ? `${tr.join(' and ')} ${JSON.stringify(x.r.definition || []).includes('item:type:spell') ? 'spells' : ''}`.trim() : '';
+          }
+          types = types.map((t) => (t === 'custom' ? label : t)).filter(Boolean);
+        }
+        return types.length ? { kind: x.r.key, type: types.join(', '), value: x.r.value != null ? this._value(ch, x.inst, x.r.value) : null, source: x.inst.rec.name } : null;
+      }).filter(Boolean);
     // Languages
     const langs = new Set([...(ch.ancestry?.languages || []), ...ch.grantedLanguages]);
     ch.languageSlots = (ch.ancestry?.addLanguageCount || 0) + Math.max(0, A.int);
@@ -1105,7 +1158,7 @@ export class Engine {
     }
     weapons.push({ rec: { name: 'Fist', slug: 'fist', cat: 'unarmed', group: 'brawling', damage: { dice: 1, die: 'd4', type: 'bludgeoning' }, traits: ['agile', 'finesse', 'nonlethal', 'unarmed'] } });
     for (const { r, inst } of ch.rules.filter((x) => x.r.key === 'Strike')) {
-      if (r.predicate && !test(this._subst(r.predicate, ch, inst), ch.options)) continue;
+      if (r.predicate && !test(this._subst(r.predicate, ch, inst), ch.liveOptions || ch.options)) continue;
       const base = r.damage?.base || {};
       const open = (v) => typeof v === 'string' && /\{(item|actor)\|/.test(v);
       let label = this._subst(r.label || '', ch, inst);
@@ -1114,7 +1167,7 @@ export class Engine {
       if (open(label)) label = '';
       const dtype = this._subst(base.damageType || 'bludgeoning', ch, inst);
       const name = label || inst.rec.name;
-      weapons.push({ rec: { name, slug: r.slug || sluggify(name), cat: r.category || 'unarmed', group: r.group || 'brawling',
+      weapons.push({ rec: { name, srcSlug: inst.rec.slug, slug: r.slug || sluggify(name), cat: r.category || 'unarmed', group: r.group || 'brawling',
         damage: { dice: base.dice || 1, die: base.die || 'd4', type: open(dtype) ? 'untyped (choose it)' : dtype }, traits: this._subst(r.traits || [], ch, inst), range: typeof r.range === 'number' ? r.range : (r.range?.increment ?? r.range?.max ?? null) }, source: inst.rec.name });
     }
     // Weapon familiarity and similar: "for proficiency, these weapons count as simple/martial" (MartialProficiency rules).
@@ -1138,16 +1191,11 @@ export class Engine {
       }
       return best;
     };
-    const rageBonus = (() => {
-      if (!state.raging) return 0;
-      let v = 2;
-      for (const { r, inst } of ch.rules) if (r.key === 'AdjustModifier' && r.slug === 'rage' && r.selector === 'strike-damage' && r.mode === 'upgrade' && test(this._subst(r.predicate || [], ch, inst), new Set([...ch.options, 'self:effect:rage']))) v = Math.max(v, this._value(ch, inst, r.value));
-      return v;
-    })();
     return weapons.map(({ rec: rec0, item, source }) => {
       const rec = rec0;
       const traits = rec.traits || [];
-      const ranged = !!rec.range && !traits.some((t) => t.startsWith('thrown')) || traits.includes('bomb');
+      // Thrown weapons of the dart group (javelin, dart, shuriken) are ranged attacks; a dagger is a melee weapon you can throw.
+      const ranged = !!rec.range && !traits.some((t) => t.startsWith('thrown')) || traits.includes('bomb') || (!!rec.range && rec.group === 'dart');
       const thrown = traits.some((t) => t.startsWith('thrown')) || traits.includes('bomb');
       const finesse = traits.includes('finesse');
       let attr = ranged ? 'dex' : (finesse && A.dex > A.str ? 'dex' : 'str');
@@ -1159,6 +1207,8 @@ export class Engine {
       if (thrown) wOpts.add('item:thrown');
       if (rec.usage) wOpts.add('item:hands-held:' + (/two-hands/.test(rec.usage) ? 2 : 1));
       if (rec.damage?.type) wOpts.add('item:damage:type:' + rec.damage.type);
+      if (rec.srcSlug) wOpts.add('strike-source:' + rec.srcSlug);
+      if (item && item.oversized) wOpts.add('item:oversized');
       // "Use your Intelligence modifier instead" (Devise a Stratagem with an agile, finesse or ranged weapon; Takedown
       // Expert with a club): the higher attribute is used. A Strike that adds Int this way counts as a stratagem Strike
       // (strategic strike damage, Scalpel's Point, Certain Stratagem…).
@@ -1191,24 +1241,37 @@ export class Engine {
       if (!ranged || (thrown && !traits.includes('bomb'))) { if (A.str) { dmgMod += A.str; dmgParts.push('Str'); } }
       else if (traits.includes('propulsive') && A.str > 0) { dmgMod += Math.floor(A.str / 2); dmgParts.push('½ Str'); }
       if (spec[rank] && !traits.includes('bomb')) { dmgMod += spec[rank]; dmgParts.push('Weapon spec.'); }
-      if (rageBonus && !ranged) { const rb = agile ? Math.floor(rageBonus / 2) : rageBonus; dmgMod += rb; dmgParts.push('Rage'); }
       const isAlchBomb = traits.includes('bomb') && traits.includes('alchemical');
       const dSel = ['strike-damage', 'damage', rec.slug + '-damage'];
       if (rec.base) dSel.push(rec.base + '-base-type-damage');
       if (isAlchBomb) dSel.push('alchemical-bomb-damage');
-      const dm = this._mods(ch, dSel, state, wOpts, ['rage']);
+      if (rec.srcSlug) dSel.push('{item|_id}-damage');
+      const dm = this._mods(ch, dSel, state, wOpts);
       // Extra damage dice (Strategic Strike: +3d6 precision while Devising a Stratagem). Only ones whose conditions
       // are all known here; ones that depend on the target (sneak attack) stay out, as before.
       const extraDice = [], diceNotes = [];
+      let dieUp = 0, dieSet = null;
       {
         const dOpts = new Set([...ch.options, ...(ch.stateOptions || []), ...wOpts]);
-        for (const { r, inst } of ch.rules) {
-          if (r.key !== 'DamageDice' || r.override || r.brackets) continue;
-          if (![].concat(this._subst(r.selector, ch, inst) || [], r.selectors || []).some((x) => dSel.includes(x))) continue;
+        for (const { r: r0, inst } of ch.rules) {
+          let r = r0;
+          if (r.key !== 'DamageDice' || r.brackets) continue;
+          const dsel = [].concat(this._subst(r.selector, ch, inst) || [], r.selectors || []);
+          if (!dsel.some((x) => dSel.includes(x))) continue;
+          const own = dsel.some((x) => /\{item\|/.test(x));
+          if (own && rec.srcSlug !== inst.rec.slug) continue;
           const pred = this._subst(r.predicate || [], ch, inst);
           if (/\{(item|actor)\|/.test(JSON.stringify(pred)) || (pred.length && !test(pred, dOpts))) continue;
+          // A bigger die for an item's own Strikes (Animal instinct at 7th: d10 → d12). Other overrides are left out.
+          if (r.override) {
+            if (own && r.override.upgrade) dieUp++;
+            else if (own && /^d\d+$/.test(r.override.dieSize || '')) dieSet = r.override.dieSize;
+            continue;
+          }
           const n = Number(this._value(ch, inst, r.diceNumber ?? 1)) || 0;
-          if (n <= 0 || !/^d\d+$/.test(r.dieSize || '')) continue;
+          const dieSize = r.dieSize || (r.critical === true ? (rec.damage?.die || '') : '');
+          if (n <= 0 || !/^d\d+$/.test(dieSize)) continue;
+          r = { ...r, dieSize };
           const what = `${n}${r.dieSize} ${r.damageType || (r.category === 'precision' ? 'precision' : rec.damage?.type || '')}`.trim();
           if (r.critical === true) diceNotes.push({ label: inst.rec.name, text: `Critical hit: also ${what}.`, crit: true });
           else extraDice.push({ text: ` + ${what}`, source: inst.rec.name });
@@ -1232,7 +1295,7 @@ export class Engine {
       const extras = {};
       for (const m of ds.used) {
         if (m.damageType && dmgType && m.damageType !== dmgType) extras[m.damageType] = (extras[m.damageType] || 0) + m.value;
-        else dmgMod += m.value;
+        else { dmgMod += m.value; if (m.label && !dmgParts.includes(m.label)) dmgParts.push(m.label); }
       }
       const splashBonus = stackMods(dm.mods.filter((m) => m.category === 'splash')).total;
       let splashBase = rec.splash || 0;
@@ -1295,8 +1358,12 @@ export class Engine {
         }
       }
       if (persistExtra.length) persistent = [persistent, ...persistExtra].filter(Boolean).join(', ');
+      if (item && item.oversized) runeNotes.push({ label: 'Large weapon', text: 'You\u2019re clumsy 1 while wielding it (Titan Mauler).' });
       // Flat damage (die "") such as Acid Flask's 1 acid.
-      const die = rec.damage ? (rec.damage.die || '') : 'd4';
+      const DIES = ['d4', 'd6', 'd8', 'd10', 'd12'];
+      let die = rec.damage ? (rec.damage.die || '') : 'd4';
+      if (die && dieSet) die = dieSet;
+      if (die && dieUp && DIES.includes(die)) die = DIES[Math.min(DIES.length - 1, DIES.indexOf(die) + dieUp)];
       return {
         name: rec.name, rec, item, source, attack, rank, attr, traits, ranged,
         map: agile ? [attack - 4, attack - 8] : [attack - 5, attack - 10],

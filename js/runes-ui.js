@@ -10,7 +10,7 @@ const STRIKING = ['None', 'Striking', 'Greater striking', 'Major striking'];
 const RESILIENT = ['None', 'Resilient', 'Greater resilient', 'Major resilient'];
 
 /** opts: { db, it (inventory entry, changed in place), level (character level), readOnly, onChange() } */
-export function openRuneManager({ db, it, level = 20, readOnly = false, onChange = () => {} }) {
+export function openRuneManager({ db, it, level = 20, readOnly = false, giant = false, onChange = () => {} }) {
   const rec = db.get(it.ref);
   const kind = runeKind(rec);
   if (!kind) return;
@@ -46,6 +46,9 @@ export function openRuneManager({ db, it, level = 20, readOnly = false, onChange
           ${matRec ? `<select data-grade ${readOnly ? 'disabled' : ''} aria-label="Grade">${matRec.grades.map((g) => `<option value="${esc(g.grade)}" ${g.grade === mat.grade ? 'selected' : ''}>${esc(GRADE_NAMES[g.grade] || g.grade)} · level ${g.level}</option>`).join('')}</select>` : ''}
         </div>
       </div>
+      ${kind === 'weapon' && giant ? `<div class="rune-sec"><h3 class="inv-h">Titan Mauler</h3>
+        <label class="row" style="gap:8px;align-items:center"><input type="checkbox" data-oversized ${it.oversized ? 'checked' : ''} ${readOnly ? 'disabled' : ''}> Built for a Large creature</label>
+        <p class="small muted" style="margin:6px 0 0">Raises your Rage damage with it (to 6, then 10 at 7th and 18 with greater weapon specialization). You're clumsy 1 while wielding it.</p></div>` : ''}
       <div class="row end" style="margin-top:14px"><button type="button" class="btn primary" data-rdone>Done</button></div>`;
     $('[data-rdone]', m.body).onclick = () => m.close();
     $$('[data-rref]', m.body).forEach((b) => (b.onclick = () => showRef(db, b.dataset.rref)));
@@ -60,6 +63,8 @@ export function openRuneManager({ db, it, level = 20, readOnly = false, onChange
       else { const x = mats.find((y) => y.slug === ms.value); it.material = { type: ms.value, grade: (x && x.grades.find((g) => g.grade === 'standard') ? 'standard' : x?.grades[0]?.grade) || 'standard' }; }
       changed();
     };
+    const ov = $('[data-oversized]', m.body);
+    if (ov) ov.onchange = () => { if (ov.checked) it.oversized = true; else delete it.oversized; changed(); };
     const gs = $('[data-grade]', m.body);
     if (gs) gs.onchange = () => { it.material = { ...it.material, grade: gs.value }; changed(); };
   };

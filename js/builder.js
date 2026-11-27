@@ -864,7 +864,7 @@ RENDER.gear = (root) => {
         it.equipped = i.checked; redraw();
       }));
       $$('[data-invest]', invCol).forEach((i) => (i.onchange = () => { find(i.dataset.invest).invested = i.checked; update(false); }));
-      $$('[data-runeman]', invCol).forEach((btn) => (btn.onclick = () => { const it = find(btn.dataset.runeman); if (it) openRuneManager({ db, it, level: ch.level, onChange: () => { update(false); drawInv(); } }); }));
+      $$('[data-runeman]', invCol).forEach((btn) => (btn.onclick = () => { const it = find(btn.dataset.runeman); if (it) openRuneManager({ db, it, level: ch.level, giant: ch.ownedSlugs.has('giant-instinct'), onChange: () => { update(false); drawInv(); } }); }));
       $$('[data-sell]', invCol).forEach((b) => (b.onclick = () => { build.inventory = build.inventory.filter((x) => x.id !== b.dataset.sell); redraw(); }));
       $$('[data-show]', invCol).forEach((el) => (el.onclick = () => showRef(db, el.dataset.show)));
       const af = $('#addFormula', invCol);
