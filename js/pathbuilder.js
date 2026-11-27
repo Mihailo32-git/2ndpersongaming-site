@@ -145,6 +145,9 @@ export function convertPathbuilder(data, db, engine) {
     if (/^general feat/.test(l)) return 'general';
     // Feats a class feature hands out (kineticist impulses, a wizard's thesis, a summoner's evolution…): no slot of their own.
     if (/impulse feat|element choice|arcane thesis|voice of nature|evolution feat|stylist tricks/.test(l)) return 'grant';
+    // "Barbarian FeatFury Instinct", "Wizard FeatWizard Universalist": a class feat handed out by that feature (Fury
+    // Instinct's extra 1st-level feat, a universalist's bonus feat). It answers the feature's own choice, not a slot.
+    if (l.startsWith(classWord + ' feat') && !/ feat \d+$/.test(l) && l !== classWord + ' feat') return 'grant';
     if (l.startsWith(classWord + ' feat')) return 'class';
     if (/ feat \d+$/.test(l)) return 'ancestry';
     return { 'Ancestry Feat': 'ancestry', 'Class Feat': 'class', 'Skill Feat': 'skill', 'General Feat': 'general', 'Archetype Feat': usesFA ? 'archetype' : 'class' }[type] || null;
