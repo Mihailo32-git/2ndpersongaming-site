@@ -1,5 +1,5 @@
 /* Fantasy skins (preview). Same layout as the default theme: only colours, fonts, frames and backgrounds change.
-   html[data-skin=tome|grove|cosmos|alchemy|steel|frost]; tome and frost also set data-theme=light, the others data-theme=dark.
+   html[data-skin=tome|grove|cosmos|alchemy|steel|frost|blast]; tome and frost also set data-theme=light, the others data-theme=dark.
    Fonts are self-hosted (fonts/, SIL Open Font License). Numbers keep the default fonts so they stay easy to read. */
 @font-face { font-family: 'Cinzel'; font-style: normal; font-display: swap; font-weight: 400 900; src: url(../fonts/cinzel-latin-wght-normal.woff2) format('woff2'); }
 @font-face { font-family: 'EB Garamond'; font-style: normal; font-display: swap; font-weight: 400 800; src: url(../fonts/eb-garamond-latin-wght-normal.woff2) format('woff2'); }
@@ -156,7 +156,8 @@ html[data-skin="cosmos"] .card, html[data-skin="cosmos"] .hero-card, html[data-s
 /* A heading mark drawn as a picture, so it looks the same on every device (no emoji). */
 html[data-skin="alchemy"] .sc-head h3::before, html[data-skin="alchemy"] .sub-head::before,
 html[data-skin="steel"] .sc-head h3::before, html[data-skin="steel"] .sub-head::before,
-html[data-skin="frost"] .sc-head h3::before, html[data-skin="frost"] .sub-head::before {
+html[data-skin="frost"] .sc-head h3::before, html[data-skin="frost"] .sub-head::before,
+html[data-skin="blast"] .sc-head h3::before, html[data-skin="blast"] .sub-head::before {
   content: ''; display: inline-block; width: .95em; height: .95em; margin-right: .45em; vertical-align: -.1em; background: var(--mark) center / contain no-repeat; }
 
 /* ------------------------------------------------------------ Alchemy: a laboratory — glassware, graph paper, molecules, medicine */
@@ -281,6 +282,60 @@ html[data-skin="frost"] .topbar::after { content: ''; position: absolute; left: 
    corner art behind it never gets in the way of reading it; the licence line at the bottom gets a band like the top bar. */
 html[data-skin="alchemy"] .page-title h1, html[data-skin="alchemy"] .group > .group-title h2,
 html[data-skin="steel"] .page-title h1, html[data-skin="steel"] .group > .group-title h2,
-html[data-skin="frost"] .page-title h1, html[data-skin="frost"] .group > .group-title h2 {
+html[data-skin="frost"] .page-title h1, html[data-skin="frost"] .group > .group-title h2,
+html[data-skin="blast"] .page-title h1, html[data-skin="blast"] .group > .group-title h2,
+html[data-skin="alchemy"] .lvl-subhead, html[data-skin="steel"] .lvl-subhead, html[data-skin="frost"] .lvl-subhead, html[data-skin="blast"] .lvl-subhead,
+html[data-skin="alchemy"] .crow.info, html[data-skin="steel"] .crow.info, html[data-skin="frost"] .crow.info, html[data-skin="blast"] .crow.info {
   text-shadow: 0 0 2px var(--bg), 0 0 6px var(--bg), 0 0 12px var(--bg), 0 0 18px var(--bg); }
-html[data-skin="alchemy"] .footer, html[data-skin="steel"] .footer, html[data-skin="frost"] .footer { background: var(--topbar); }
+html[data-skin="alchemy"] .footer, html[data-skin="steel"] .footer, html[data-skin="frost"] .footer, html[data-skin="blast"] .footer { background: var(--topbar); }
+
+/* ------------------------------------------------------------ Blastworks: an iron wall, rusty scrap, junk crafting, explosions */
+html[data-skin="blast"] {
+  color-scheme: dark; --ov: 255, 230, 200;
+  --bg: #141516; --header: #1a1b1c; --panel: #21150e; --panel2: #2b1c13; --panel3: #38251a;
+  --line: #3a2619; --line2: #4c3222; --line3: #2a1b12;
+  --ink: #f4e8d6; --ink2: #e0ccb2; --muted: #b59c82; --faint: #7d6652; --heading: #ffd166;
+  --accent: #ff8c2a; --accent-ink: #1c0d00; --accent-soft: #3a2010; --accent-line: #7f4518; --link: #ffad5c;
+  --acc-rgb: 255, 140, 42; --acc-hi: #ffa64d; --acc-lo: #e0640c; --acc-edge: #ff8c2a;
+  --ok: #9ccc3c; --ok-soft: #222c12; --hero: #ffd166; --warn: #ffc14d; --warn-soft: #3a2c10; --bad: #e5483a; --bad-ink: #ffaaa0; --bad-soft: #321511; --bad-line: #6b2a20;
+  --r0: #47321f; --r1: #3a6a8c; --r2: #5d8a2a; --r3: #a8701c; --r4: #7d4a9a;
+  --glass: rgba(30, 19, 12, .8); --glass-2: rgba(46, 30, 20, .8); --glass-3: rgba(62, 41, 28, .88); --glass-strong: rgba(24, 15, 9, .97);
+  --glass-line: rgba(255, 170, 100, .13); --glass-line2: rgba(255, 170, 100, .26); --glass-hi: inset 0 1px 0 rgba(255, 210, 160, .06);
+  --shadow: 0 10px 28px rgba(0, 0, 0, .55);
+  --frame: rgba(194, 100, 42, .62); --frame-gap: rgba(12, 7, 4, .65); --frame-inner: rgba(255, 200, 60, .14);
+  --input-bg: rgba(10, 6, 3, .62); --topbar: rgba(24, 25, 27, .88); --hp-fill: linear-gradient(90deg, #5d8a2a, #b5e04a); --brand-hue: 189deg;
+  --mark: url(../img/skins/blast-mark.svg);
+  --backdrop:
+    url(../img/skins/blast-embers.svg) 0 0 / 360px 360px,
+    radial-gradient(1200px 900px at 50% 40%, transparent 40%, rgba(0, 0, 0, .62) 100%),
+    radial-gradient(900px 620px at 100% 0%, rgba(255, 110, 20, .2), transparent 62%),
+    radial-gradient(600px 420px at 100% 100%, rgba(255, 110, 20, .12), transparent 62%),
+    radial-gradient(260px 200px at 22% 38%, rgba(0, 0, 0, .45), transparent 70%),
+    radial-gradient(300px 220px at 70% 72%, rgba(0, 0, 0, .4), transparent 70%),
+    url(../img/skins/blast-scrawl.svg) 0 0 / 420px 420px,
+    linear-gradient(rgba(10, 10, 11, .3), rgba(10, 10, 11, .3)),
+    url(../img/skins/blast-iron.svg) 0 0 / 480px 480px,
+    #141516;
+  --corner-art: url(../img/skins/blast-boom.svg) right -20px top 46px / 450px auto no-repeat,
+    url(../img/skins/blast-boom2.svg) right -40px bottom -30px / 300px auto no-repeat,
+    url(../img/skins/blast-junk.svg) left -10px bottom -10px / 420px auto no-repeat;
+}
+html[data-skin="blast"] body::after { opacity: .75; }
+/* cards are corroded plates, rust creeping in from the edges: a riveted patch on one corner, hazard tape on another, bolts on the rest */
+html[data-skin="blast"] .card, html[data-skin="blast"] .hero-card, html[data-skin="blast"] .sidepanel, html[data-skin="blast"] .sheet-cols > .col-main {
+  box-shadow: inset 0 0 0 3px var(--frame-gap), inset 0 0 0 4px var(--frame-inner), inset 0 0 26px rgba(194, 100, 42, .32), var(--shadow); }
+html[data-skin="blast"] .card, html[data-skin="blast"] .sidepanel, html[data-skin="blast"] .sheet-cols > .col-main {
+  background: url(../img/skins/blast-patch.svg) left -1px top -1px / 26px no-repeat, url(../img/skins/blast-tape-br.svg) right -2px bottom -2px / 26px no-repeat,
+    url(../img/skins/blast-bolt.svg) right 5px top 5px / 9px no-repeat, url(../img/skins/blast-bolt.svg) left 5px bottom 5px / 9px no-repeat,
+    linear-gradient(var(--glass), var(--glass)), url(../img/skins/blast-plate.svg) 0 0 / 400px 400px; }
+html[data-skin="blast"] .hero-card { background: url(../img/skins/blast-bomb.svg) right 8px bottom 4px / 80px auto no-repeat,
+  url(../img/skins/blast-patch.svg) left -1px top -1px / 26px no-repeat, url(../img/skins/blast-tape-br.svg) right -2px bottom -2px / 26px no-repeat,
+  url(../img/skins/blast-bolt.svg) right 5px top 5px / 9px no-repeat, url(../img/skins/blast-bolt.svg) left 5px bottom 5px / 9px no-repeat,
+  linear-gradient(var(--glass), var(--glass)), url(../img/skins/blast-plate.svg) 0 0 / 400px 400px; }
+html[data-skin="blast"] section.card[style*="background:transparent"] { background: transparent !important; box-shadow: none; }
+html[data-skin="blast"] h1, html[data-skin="blast"] .hero-id h1 { text-shadow: 0 0 14px rgba(255, 140, 42, .4); }
+html[data-skin="blast"] .btn.primary { box-shadow: 0 3px 14px rgba(255, 110, 20, .4), inset 0 1px 0 rgba(255, 255, 255, .3); }
+/* the top bar is a rusty plate too, with a strip of hazard tape under it */
+html[data-skin="blast"] .topbar { background: linear-gradient(var(--topbar), var(--topbar)), url(../img/skins/blast-iron.svg) 0 -8px / 480px 480px; box-shadow: none; }
+html[data-skin="blast"] .topbar::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 8px; pointer-events: none;
+  background: repeating-linear-gradient(-45deg, #f2c230 0 9px, #1a1814 9px 18px); opacity: .85; box-shadow: 0 2px 6px rgba(0, 0, 0, .5); }
