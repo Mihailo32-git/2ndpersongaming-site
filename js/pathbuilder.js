@@ -484,6 +484,9 @@ export function convertPathbuilder(data, db, engine) {
       if (runed && !wraps) notes.push('Fist: has runes in Pathbuilder. Add Handwraps of Mighty Blows to the inventory and put the runes on them.');
       continue;
     }
+    // Pathbuilder's generic bomb attack (and the vial attack): the sheet makes these Strikes itself, from the
+    // alchemist's versatile vials and the bombs actually carried or made with Advanced Alchemy.
+    if (/^(alchemical bombs?|versatile vials?)$/.test(norm(w.name))) continue;
     const rec = find('equipment', w.name);
     if (!rec) { missing('Weapon', w.display || w.name); continue; }
     // A combination weapon comes as two entries (melee and ranged): it's one weapon.
