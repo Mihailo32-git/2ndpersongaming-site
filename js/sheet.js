@@ -854,7 +854,7 @@ TAB_RENDER.spells = (el) => {
   if (!tabs.length) { el.innerHTML = '<p class="muted">No spells yet. Pick them in the builder.</p>'; return; }
   const cur = tabs.find((t) => t.id === spellTab) || tabs[0];
   el.innerHTML = (tabs.length > 1 ? `<div class="act-seg spell-seg" role="tablist" aria-label="Sources of spells">${tabs.map((t) => `<button type="button" role="tab" data-spelltab="${esc(t.id)}" aria-selected="${t === cur}"${t.title ? ` title="${esc(t.title)}"` : ''}>${esc(t.label)} <span class="n">${t.n}</span></button>`).join('')}</div>` : '') + cur.html();
-  $$('[data-spelltab]', el).forEach((b) => (b.onclick = () => { spellTab = b.dataset.spelltab; try { sessionStorage.setItem('pf2e.spellTab', spellTab); } catch (err) { /* ignore */ } TAB_RENDER.spells(el); }));
+  $$('[data-spelltab]', el).forEach((b) => (b.onclick = () => { spellTab = b.dataset.spelltab; try { sessionStorage.setItem('pf2e.spellTab', spellTab); } catch (err) { /* ignore */ } TAB_RENDER.spells(el); wireShow(el); }));
   if (readOnly) return;
   $$('[data-slot]', el).forEach((b) => (b.onclick = () => {
     const o = JSON.parse(b.dataset.slot);
@@ -1480,9 +1480,14 @@ TAB_RENDER.notes = (el) => {
 };
 
 // ------------------------------------------------------------------ events
+// Names that open their rules text, and links inside text. Also run on a part that redraws itself (spell sub-tabs).
+function wireShow(root) {
+  $$('[data-show]', root).forEach((e) => (e.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); showRef(db, e.dataset.show, { extras: actionExtras }); }));
+  wireRefs(db, root);
+  if (readOnly && root !== main) $$('.no-print', root).forEach((b) => b.remove());
+}
 function wire() {
-  $$('[data-show]', main).forEach((e) => (e.onclick = (ev) => { ev.preventDefault(); ev.stopPropagation(); showRef(db, e.dataset.show, { extras: actionExtras }); }));
-  wireRefs(db, main);
+  wireShow(main);
   $$('[role=tab][data-tab]', main).forEach((b) => (b.onclick = () => { tab = b.dataset.tab; sessionStorage.setItem('pf2e.sheetTab', tab); render(); }));
   $$('[data-bd]', main).forEach((p) => (p.onclick = () => {
     const k = p.dataset.bd;
