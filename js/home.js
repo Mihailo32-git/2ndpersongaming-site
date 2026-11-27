@@ -11,6 +11,28 @@ const store = await new Store().init();
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
+// Secret: press and hold the "Your characters" title for 2 seconds to show or hide the GM screen on this device.
+{
+  const h = $('.page-title h1');
+  if (h) {
+    Object.assign(h.style, { userSelect: 'none', webkitUserSelect: 'none', webkitTouchCallout: 'none', touchAction: 'manipulation' });
+    let timer = null;
+    const stop = () => { clearTimeout(timer); timer = null; };
+    h.addEventListener('pointerdown', () => {
+      stop();
+      timer = setTimeout(() => {
+        timer = null;
+        let on = false;
+        try { on = localStorage.getItem('pf2e.gmOn') !== '1'; if (on) localStorage.setItem('pf2e.gmOn', '1'); else localStorage.removeItem('pf2e.gmOn'); } catch (e) { /* ignore */ }
+        if (on) document.documentElement.dataset.gm = '1'; else delete document.documentElement.dataset.gm;
+        toast(on ? 'GM screen unlocked on this device.' : 'GM screen hidden on this device.', 'ok');
+      }, 2000);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach((e) => h.addEventListener(e, stop));
+    h.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+}
+
 function header() {
   const st = store.syncState();
   $('#saveState').textContent = store.apiAvailable ? syncLabel(st) : 'Saved in this browser';

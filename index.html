@@ -16,6 +16,7 @@
 <script>try{var t=localStorage.getItem('pf2e.theme')||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'),s=localStorage.getItem('pf2e.skin'),m={tome:'light',grove:'dark',cosmos:'dark',alchemy:'dark',steel:'dark',frost:'light',blast:'dark',mirror:'dark'};if(m[s]){document.documentElement.dataset.skin=s;t=m[s];}document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme='dark';}</script>
 <link rel="stylesheet" href="css/app.css">
 <link rel="stylesheet" href="css/skins.css">
+<script>try{if(localStorage.getItem('pf2e.gmOn')==='1')document.documentElement.dataset.gm='1';}catch(e){}</script>
 <script type="module" src="js/theme.js"></script>
 </head>
 <body>
