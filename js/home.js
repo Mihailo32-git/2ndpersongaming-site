@@ -3,6 +3,8 @@ import { Store, api } from './store.js';
 import { mountAccount, openAuth, syncLabel } from './account.js';
 import { modal, toast, confirmBox, esc } from './ui.js';
 import { titleCase } from './util.js';
+// "Unbreakable Goblin" + "Goblin" → "Unbreakable Goblin"; "Dromaar" + "Minotaur" → "Dromaar Minotaur".
+const lineage = (c) => { const h = titleCase(c.heritage || ''), a = titleCase(c.ancestry || ''); return h && a && (' ' + h + ' ').includes(' ' + a + ' ') ? h : [h, a].filter(Boolean).join(' '); };
 
 // Wrapped in an async function instead of top-level await so older tablet browsers (Chrome 80+) can run it.
 (async () => {
@@ -69,7 +71,7 @@ async function render() {
     <div class="card char-card">
       <div class="avatar small" aria-hidden="true">${esc(initials(c.name))}</div>
       <div class="grow"><h3>${esc(c.name || 'Unnamed')}${c.pending ? ' <span class="badge warn" title="Saved on this device; uploads when online">Not uploaded yet</span>' : ''}${c.offlineCopy ? ' <span class="badge" title="The copy on this device">Offline copy</span>' : ''}</h3>
-        <div class="muted small">Level ${esc(c.level || 1)} ${esc(titleCase(c.heritage || ''))} ${esc(titleCase(c.ancestry || ''))} ${esc(titleCase(c.class || ''))}</div></div>
+        <div class="muted small">Level ${esc(c.level || 1)} ${esc(lineage(c))} ${esc(titleCase(c.class || ''))}</div></div>
       <div class="row">
         <a class="btn primary small" href="sheet.html?id=${encodeURIComponent(c.id)}">Sheet</a>
         <a class="btn small" href="builder.html?id=${encodeURIComponent(c.id)}">Edit</a>

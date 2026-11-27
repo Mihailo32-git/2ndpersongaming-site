@@ -70,7 +70,9 @@ export function normalizeBuild(b0) {
   for (const a of Object.values(b.spells.arch)) if (a && typeof a === 'object') { if ('rep' in a) a.rep = asObj(a.rep); if ('book' in a) a.book = asObj(a.book); }
   b.details = Object.assign(d.details, asObj(b.details));
   b.feats = asObj(b.feats); b.choices = asObj(b.choices); b.skillAttrs = asObj(b.skillAttrs);
-  for (const [k, v] of Object.entries(b.choices)) if (Array.isArray(v) && !v.length) b.choices[k] = {}; b.inventory = b.inventory || []; b.formulas = b.formulas || []; b.languages = b.languages || [];
+  for (const [k, v] of Object.entries(b.choices)) if (Array.isArray(v) && !v.length) b.choices[k] = {}; b.inventory = b.inventory || []; b.formulas = b.formulas || [];
+  // Pathbuilder exports an unpicked language slot as "None selected"; older imports saved it as a language.
+  b.languages = (b.languages || []).filter((l) => l && !/^none[- ]selected$/i.test(l));
   b.companions = Array.isArray(b.companions) ? b.companions : [];
   return b;
 }

@@ -321,7 +321,7 @@ export function convertPathbuilder(data, db, engine) {
 
   // ---------------------------------------------------------------- languages
   const autoLangs = new Set(ch.languages.slice(0, ch.languages.length - (b.languages || []).length));
-  b.languages = (pb.languages || []).map((l) => sluggify(l)).filter((l) => l && !autoLangs.has(l));
+  b.languages = (pb.languages || []).map((l) => sluggify(l)).filter((l) => l && l !== 'none-selected' && !autoLangs.has(l));
 
   // ---------------------------------------------------------------- skills: training picks and increases
   const target = {};
