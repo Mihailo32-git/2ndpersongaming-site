@@ -14,7 +14,7 @@ export const SKINS = [
   { id: 'frost', name: 'Frost', mode: 'light', color: '#f1f7fb', note: 'Ice, rime and snow' },
   { id: 'blast', name: 'Blastworks', mode: 'dark', color: '#1a1b1c', note: 'Iron, scrap, junk crafting and explosions' },
   { id: 'mirror', name: 'Mirrorshard', mode: 'dark', color: '#0f1219', note: 'Shattered mirrors, glass and fractured reality' },
-  { id: 'clockwork', name: 'Clockwork', mode: 'dark', color: '#17110b', note: 'Polished brass and copper, gears and rivets, blueprints' },
+  { id: 'clockwork', name: 'Clockwork', mode: 'dark', color: '#17110b', note: 'Brass and cogs, and the threads of Fate' },
 ];
 const saved = () => { try { return localStorage.getItem(KEY); } catch (e) { return null; } };
 // The theme picker is hidden until it's unlocked on a device (a secret: tap the "App & offline" title 5 times).

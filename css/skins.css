@@ -393,7 +393,8 @@ html[data-skin="mirror"] .topbar::after { content: ''; position: absolute; left:
   background: linear-gradient(90deg, transparent, #6fe3ff 18%, #a98bff 42%, #ff8fd8 62%, #ffd27a 80%, transparent); opacity: .8; }
 html[data-skin="mirror"] .page-title h1 { text-shadow: -1.5px 0 rgba(255, 111, 181, .55), 1.5px 0 rgba(111, 227, 255, .55), 0 0 8px var(--bg), 0 0 16px var(--bg); }
 
-/* ------------------------------------------------------------ Clockwork: polished brass and copper, gears and rivets, blueprint lines */
+/* ------------------------------------------------------------ Clockwork: an order of brass and cogs that holds the power of Fate —
+   a Wheel of Fate with an eye, a gear-driven bobbin of gold thread, a star map, an hourglass */
 html[data-skin="clockwork"] {
   color-scheme: dark; --ov: 255, 238, 205;
   --bg: #110d09; --header: #17110b; --panel: #1c150e; --panel2: #251c13; --panel3: #31251a;
@@ -407,15 +408,16 @@ html[data-skin="clockwork"] {
   --glass-line: rgba(240, 196, 103, .13); --glass-line2: rgba(240, 196, 103, .26); --glass-hi: inset 0 1px 0 rgba(255, 236, 190, .07);
   --shadow: 0 10px 28px rgba(0, 0, 0, .55);
   --frame: rgba(224, 173, 76, .5); --frame-gap: rgba(8, 6, 3, .62); --frame-inner: rgba(246, 214, 136, .14);
-  --input-bg: rgba(8, 6, 3, .6); --topbar: rgba(20, 15, 10, .93); --hp-fill: linear-gradient(90deg, #b8613a, #e0ad4c, #f6d688); --brand-hue: 200deg;
-  --mark: url(../img/skins/clock-mark.svg);
+  --input-bg: rgba(8, 6, 3, .6); --topbar: rgba(20, 15, 10, .93); --hp-fill: linear-gradient(90deg, #b07a2c, #ffd36a, #fff1c8); --brand-hue: 200deg;
+  --mark: url(../img/skins/clock-eye.svg);
   --backdrop:
     radial-gradient(1200px 900px at 50% 40%, transparent 42%, rgba(0, 0, 0, .6) 100%),
-    radial-gradient(900px 620px at 100% 0%, rgba(240, 180, 80, .13), transparent 62%),
+    radial-gradient(900px 620px at 100% 0%, rgba(240, 180, 80, .14), transparent 62%),
+    radial-gradient(1100px 700px at 50% -10%, rgba(70, 52, 120, .22), transparent 70%),
     radial-gradient(700px 520px at 0% 100%, rgba(200, 110, 60, .1), transparent 65%),
-    url(../img/skins/clock-plate.svg) 0 0 / 360px 360px,
-    linear-gradient(160deg, #18120c, #0e0a07 60%, #140e09);
-  --corner-art: url(../img/skins/clock-gears.svg) right -20px top 50px / 330px auto no-repeat, url(../img/skins/clock-works.svg) left -16px bottom -12px / 290px auto no-repeat;
+    url(../img/skins/clock-stars.svg) 0 0 / 360px 360px,
+    linear-gradient(170deg, #15111a, #110d0a 45%, #0e0a07 70%, #140e09);
+  --corner-art: url(../img/skins/clock-orrery.svg) right -24px top 50px / 340px auto no-repeat, url(../img/skins/clock-loom.svg) left -12px bottom -10px / 228px auto no-repeat;
 }
 html[data-skin="clockwork"] body::after { opacity: .6; }
 /* cards are brushed metal plates, a riveted brass bracket on two corners */
@@ -424,12 +426,12 @@ html[data-skin="clockwork"] .card, html[data-skin="clockwork"] .hero-card, html[
 html[data-skin="clockwork"] .card, html[data-skin="clockwork"] .sidepanel, html[data-skin="clockwork"] .sheet-cols > .col-main {
   background: url(../img/skins/clock-bracket-tl.svg) left 0 top 0 / 30px no-repeat, url(../img/skins/clock-bracket-br.svg) right 0 bottom 0 / 30px no-repeat,
     linear-gradient(var(--glass), var(--glass)), url(../img/skins/clock-brushed.svg) 0 0 / 200px 200px; }
-html[data-skin="clockwork"] .hero-card { background: url(../img/skins/clock-key.svg) right 10px bottom 6px / 74px auto no-repeat,
+html[data-skin="clockwork"] .hero-card { background: url(../img/skins/clock-hourglass.svg) right 12px bottom 8px / 40px auto no-repeat,
   url(../img/skins/clock-bracket-tl.svg) left 0 top 0 / 30px no-repeat, url(../img/skins/clock-bracket-br.svg) right 0 bottom 0 / 30px no-repeat,
   linear-gradient(var(--glass), var(--glass)), url(../img/skins/clock-brushed.svg) 0 0 / 200px 200px; }
 html[data-skin="clockwork"] section.card[style*="background:transparent"] { background: transparent !important; box-shadow: none; }
 /* engraved brass titles */
-html[data-skin="clockwork"] h1, html[data-skin="clockwork"] .hero-id h1 { text-shadow: 0 1px 0 rgba(0, 0, 0, .7), 0 0 14px rgba(224, 173, 76, .25); }
+html[data-skin="clockwork"] h1, html[data-skin="clockwork"] .hero-id h1 { text-shadow: 0 1px 0 rgba(0, 0, 0, .7), 0 0 16px rgba(255, 211, 106, .32); }
 html[data-skin="clockwork"] .sc-head h3, html[data-skin="clockwork"] .modal header h2 { text-shadow: 0 1px 0 rgba(0, 0, 0, .65); }
 html[data-skin="clockwork"] .page-title h1 { text-shadow: 0 1px 0 rgba(0, 0, 0, .7), 0 0 8px var(--bg), 0 0 16px var(--bg); }
 /* polished brass buttons */
@@ -440,5 +442,19 @@ html[data-skin="clockwork"] .btn.primary:hover { background: linear-gradient(180
 /* a brass rail under the top bar, riveted every few centimetres */
 html[data-skin="clockwork"] .topbar::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 5px; pointer-events: none;
   background: radial-gradient(circle at 50% 50%, #fff3cf 0 .9px, #b07a2c 1.4px, #5c3b12 2px, transparent 2.4px) 12px 0 / 48px 5px repeat-x,
-    linear-gradient(180deg, #f6d688, #c48d36 55%, #6f4815); box-shadow: 0 2px 6px rgba(0, 0, 0, .55); }
+    linear-gradient(180deg, #f6d688, #c48d36 55%, #6f4815); box-shadow: 0 2px 6px rgba(0, 0, 0, .55), 0 3px 14px rgba(255, 211, 106, .2); }
+/* the HP bar glows like gold thread */
+html[data-skin="clockwork"] .hpbar > div:first-child:not(.low):not(.crit) { box-shadow: 0 0 8px rgba(255, 211, 106, .45); }
+/* a clean face instead of Cinzel and Garamond: Inter, engraved-label capitals for headings, tabs and labels */
+html[data-skin="clockwork"] { --display: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --book: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+html[data-skin="clockwork"] .sub-head, html[data-skin="clockwork"] .sc-head h3, html[data-skin="clockwork"] .nav a, html[data-skin="clockwork"] .tabs button,
+html[data-skin="clockwork"] .ss .k, html[data-skin="clockwork"] .pill-label, html[data-skin="clockwork"] .tile-head, html[data-skin="clockwork"] .rank-head .rk,
+html[data-skin="clockwork"] .group > .group-title h2, html[data-skin="clockwork"] .modal header h2 { text-transform: uppercase; letter-spacing: .09em; font-weight: 600; }
+html[data-skin="clockwork"] .nav a, html[data-skin="clockwork"] .tabs button { font-size: 13px; }
+html[data-skin="clockwork"] .sub-head, html[data-skin="clockwork"] .sc-head h3, html[data-skin="clockwork"] .modal header h2 { font-size: 13.5px; }
+html[data-skin="clockwork"] .hero-id h1, html[data-skin="clockwork"] .page-title h1 { font-weight: 700; letter-spacing: .01em; }
+html[data-skin="clockwork"] .name, html[data-skin="clockwork"] .sk-name, html[data-skin="clockwork"] .identity { font-size: 15px; font-weight: 600; letter-spacing: 0; }
+html[data-skin="clockwork"] .rules-text { font-size: 15px; line-height: 1.55; }
+html[data-skin="clockwork"] .spell-line .sub, html[data-skin="clockwork"] .identity { font-size: 13.5px; }
 
+html[data-skin="clockwork"] .hero-id .identity, html[data-skin="clockwork"] .identity { font-weight: 500; font-size: 13.5px; }
