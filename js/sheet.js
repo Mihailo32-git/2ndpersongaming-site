@@ -169,6 +169,20 @@ function portraitModal() {
   $('[data-prm]', m.body).onclick = async () => { if (!(await confirmBox('Remove this portrait?'))) return; delete build.portrait; saveBuild(); render(); m.close(); };
 }
 function change(rerender = true) { compute(); saveState(); if (rerender) render(); }
+// Unleash Psyche: on for 2 rounds; when it subsides, Stupefied 1 for 2 rounds and no unleashing for 2 rounds.
+function toggleUnleash() {
+  if (!state.unleashed) {
+    if (state.conditions.some((c) => c.slug === 'stupefied')) { toast("You can't Unleash your Psyche while Stupefied"); return; }
+    state.unleashed = true;
+    toast('Psyche unleashed for 2 rounds: +2 × rank status damage on your damaging psychic spells');
+  } else {
+    state.unleashed = false;
+    const st = state.conditions.find((c) => c.slug === 'stupefied');
+    if (st) st.value = Math.max(st.value, 1); else state.conditions.push({ slug: 'stupefied', value: 1 });
+    toast("Psyche subsided: Stupefied 1 for 2 rounds, and you can't Unleash again for 2 rounds");
+  }
+  change();
+}
 
 // ------------------------------------------------------------------ rendering helpers
 // AC, Perception, a save or a skill up close. Situational modifiers can be ticked on: they then count
@@ -607,12 +621,72 @@ TAB_RENDER.feats = (el) => {
 };
 
 // ------------------------------------------------------------------ spells
-function spellRow(s, { extra = '', cast = false, actions = '' } = {}) {
-  const r = s.rec;
-  const sub = [r?.range && 'Range ' + r.range, r?.area, r?.target && 'Targets ' + r.target, r?.save ? titleCase(r.save) : r?.vs ? 'vs ' + titleCase(r.vs) : '', r?.duration].filter(Boolean);
-  return `<div class="spell-line ${cast ? 'cast' : ''}"><span class="glyph">${actionGlyph(r)}</span><span class="name" data-show="${esc(s.ref)}">${esc(r?.name || s.ref)}</span>${extra}<span class="grow"></span>${actions}
-    ${sub.length ? `<div class="sub">${esc(sub.join(' · '))}</div>` : ''}</div>`;
+// ---- Spell row columns: damage at the rank it's cast, the defense it targets, and its range / area.
+const DMG_RE = /^(?:(\d+)d(\d+))?\s*(?:([+-])\s*(\d+))?$/;
+function parseDice(f) {
+  const t = String(f).trim();
+  if (/^\d+$/.test(t)) return { n: 0, die: 0, flat: Number(t) };
+  const m = t.match(DMG_RE);
+  return m && (m[1] || m[4]) ? { n: Number(m[1] || 0), die: Number(m[2] || 0), flat: m[4] ? Number(m[3] + m[4]) : 0 } : null;
 }
+/** A spell's damage when cast at `rank` ("6d6 fire + 2d6 persistent fire"), or '' when it deals none. */
+function spellDamage(rec, rank) {
+  const parts = (rec?.damage || []).map((d) => { const i = d.indexOf(' '); const f = i < 0 ? d : d.slice(0, i); return { raw: d, f: parseDice(f), type: i < 0 ? '' : d.slice(i + 1) }; });
+  if (!parts.length) return '';
+  const h = rec.heighten, base = rec.rank || 1;
+  if (h && h.type === 'interval' && h.damage && rank > base) {
+    const steps = Math.floor((rank - base) / (h.interval || 1));
+    (Array.isArray(h.damage) ? h.damage : Object.values(h.damage)).forEach((a, i) => {
+      const p = parts[i], x = parseDice(a);
+      if (!p || !p.f || !x || !steps) return;
+      if (x.n && (!p.f.n || p.f.die === x.die)) { p.f.n += x.n * steps; p.f.die = x.die; }
+      p.f.flat += x.flat * steps;
+    });
+  } else if (h && h.type === 'fixed' && h.levels) {
+    const lv = Object.keys(h.levels).map(Number).filter((l) => l <= rank && h.levels[l]?.damage).sort((a, b) => b - a)[0];
+    if (lv) {
+      const dm = h.levels[lv].damage;
+      (Array.isArray(dm) ? dm : Object.values(dm)).forEach((d, i) => { const x = parseDice(d.formula); if (parts[i] && x) parts[i].f = x; });
+    }
+  }
+  return parts.map((p) => {
+    if (!p.f) return p.raw;
+    const dice = p.f.n ? `${p.f.n}d${p.f.die}` : '';
+    const flat = p.f.flat ? (dice ? (p.f.flat > 0 ? '+' : '') + p.f.flat : String(p.f.flat)) : '';
+    return `${dice}${flat}${p.type && p.type !== 'untyped' ? ' ' + p.type : ''}`;
+  }).join(' + ');
+}
+const SAVE_ABBR = { fortitude: 'Fort', reflex: 'Ref', will: 'Will' };
+function spellDefense(rec) {
+  if (!rec) return '';
+  if (rec.save) { const basic = /basic/.test(rec.save); const k = rec.save.replace('basic', '').trim(); return (SAVE_ABBR[k] || titleCase(k)) + (basic ? ' (basic)' : ''); }
+  if (rec.vs === 'ac' || (rec.traits || []).includes('attack')) return 'AC';
+  if (rec.vs) { const k = rec.vs.replace('-dc', ''); return (SAVE_ABBR[k] || titleCase(k)) + ' DC'; }
+  return '';
+}
+function spellReach(rec) {
+  if (!rec) return '';
+  const short = (t) => String(t).replace(/(\d+)[- ]f(?:oo|ee)t/g, '$1 ft').replace(/(\d+) ft (burst|cone|line|emanation|cylinder|cube|square|wall)/g, '$1-ft $2');
+  const range = rec.range && (/^\d+$/.test(rec.range) ? `${rec.range} ft` : short(rec.range));
+  return [range, rec.area && short(rec.area)].filter(Boolean).join(' · ');
+}
+function spellRow(s, { extra = '', cast = false, actions = '', rank = null, unleashed = false } = {}) {
+  const r = s.rec;
+  const sc = ch.spellcasting;
+  // Cantrips and focus spells heighten to half your level; everything else is cast at the rank it's listed under.
+  const rk = rank ?? (r && (isCantrip(r) || (r.traits || []).includes('focus')) ? sc.cantripRank : (s.rank || r?.rank || 1));
+  const dmg = spellDamage(r, rk), def = spellDefense(r), reach = spellReach(r);
+  // Unleash Psyche: damaging psychic spells get a status bonus of double the spell's rank to their initial damage.
+  const plus = unleashed && dmg ? 2 * rk : 0;
+  // On narrow screens the columns are hidden and the line under the name shows range, area and defense instead.
+  const wide = [r?.target && 'Targets ' + r.target, r?.duration].filter(Boolean);
+  const narrow = [dmg && dmg + (plus ? ` +${plus} (unleashed)` : ''), r?.range && 'Range ' + r.range, r?.area, r?.target && 'Targets ' + r.target, r?.save ? titleCase(r.save) : r?.vs ? 'vs ' + titleCase(r.vs) : '', r?.duration].filter(Boolean);
+  return `<div class="spell-line ${cast ? 'cast' : ''}"><span class="glyph">${actionGlyph(r)}</span><span class="sp-name"><span class="name" data-show="${esc(s.ref)}">${esc(r?.name || s.ref)}</span>${extra}</span>
+    <span class="sp-col sp-dmg" title="${dmg ? `Damage when cast at rank ${rk}${plus ? `, +${plus} status from Unleash Psyche` : ''}` : ''}">${dmg ? esc(dmg) + (plus ? ` <span class="sp-plus">+${plus}</span>` : '') : '<span class="faint">—</span>'}</span><span class="sp-col sp-def">${def ? esc(def) : '<span class="faint">—</span>'}</span><span class="sp-col sp-reach">${reach ? esc(reach) : '<span class="faint">—</span>'}</span><span class="sp-act">${actions}</span>
+    ${wide.length ? `<div class="sub sub-wide">${esc(wide.join(' · '))}</div>` : ''}${narrow.length ? `<div class="sub sub-narrow">${esc(narrow.join(' · '))}</div>` : ''}</div>`;
+}
+/** Column labels for a card of spell rows. */
+const spellHead = () => '<div class="spell-line sp-head" aria-hidden="true"><span></span><span></span><span class="sp-col">Damage</span><span class="sp-col">Defense</span><span class="sp-col">Range · area</span><span class="sp-act"></span></div>';
 // Staves: spells cast by spending charges. Preparing one at daily preparations gives it charges equal to the
 // highest rank of spell you can cast (one staff a day); a spell costs charges equal to its rank, cantrips are free.
 // state.staff = { id (inventory item), left, max }.
@@ -633,7 +707,7 @@ function staffHtml(it) {
   const trads = new Set(sc.entries.map((e) => e.trad).filter(Boolean));
   const onList = (rec) => !trads.size || (rec.trad || []).some((t) => trads.has(t));
   const spont = sc.entries.find((e) => e.type === 'spontaneous' && Object.keys(e.slots || {}).length);
-  let h = `<section class="card staff-card" style="background:transparent"><div class="sc-head"><h3><span class="name" data-show="${esc(refOf(it.rec))}">${esc(it.rec.name)}</span></h3><div class="sc-stats"><span class="sc-stat">Staff</span>${prepared ? `<span class="sc-stat">Charges<b>${left}/${max}</b></span>` : ''}</div></div>`;
+  let h = `<section class="card staff-card" style="background:transparent;--sp-act:${readOnly ? 0 : 150}px"><div class="sc-head"><h3><span class="name" data-show="${esc(refOf(it.rec))}">${esc(it.rec.name)}</span></h3><div class="sc-stats"><span class="sc-stat">Staff</span>${prepared ? `<span class="sc-stat">Charges<b>${left}/${max}</b></span>` : ''}</div></div>`;
   if (!prepared) {
     h += `<p class="notice small">${n0 ? `Not prepared today. One staff a day gets charges equal to the highest rank of spell you can cast: <b>${n0}</b>.` : 'You need to be able to cast spells to prepare a staff.'}
       ${n0 && !readOnly ? `<br><button type="button" class="btn small primary" data-staffprep="${esc(it.id)}" style="margin-top:6px">Prepare (${n0} charge${n0 === 1 ? '' : 's'})</button>` : ''}</p>`;
@@ -641,12 +715,14 @@ function staffHtml(it) {
     h += `<div class="rank-block"><div class="rank-head"><span class="rk">Charges</span><span class="slot-pips" aria-label="${left} of ${max} charges left">${Array.from({ length: max }, (_, i) => `<button type="button" class="${i < max - left ? 'used' : ''}" data-staffpip="${i}" aria-label="Charge ${i + 1}" ${readOnly ? 'disabled' : ''}></button>`).join('')}</span><span class="small muted">${left}/${max}</span>
       ${readOnly ? '' : `<button type="button" class="btn small" data-staffadd title="${sc.entries.some((e) => e.type === 'prepared') ? 'Prepared casters: expend a spell slot when you prepare the staff to add charges equal to its rank' : 'Add a charge'}">+1</button>`}</div></div>`;
   }
+  h += spellHead();
   for (const [rank, refs] of it.rec.staffSpells) {
     const list = refs.map((r) => ({ ref: r, rec: db.get(r) })).filter((x) => x.rec);
     if (!list.length) continue;
     const slotsLeft = spont && rank ? (spont.slots[rank] || 0) - ((state.used[spont.id] || {})[rank] || 0) : 0;
     h += `<div class="rank-block"><div class="rank-head"><span class="rk">${rank ? ordinal(rank) : 'Cantrips'}</span><span class="small muted">${rank ? `${rank} charge${rank > 1 ? 's' : ''}` : `free · heightened to ${sc.cantripRank}`}</span></div>`;
     h += list.map((x) => spellRow(x, {
+      rank: rank || sc.cantripRank,
       extra: onList(x.rec) ? '' : ' <span class="badge" title="You can cast a spell from a staff only if it’s on your spell list">not on your list</span>',
       actions: !rank || readOnly ? '' : `<button type="button" class="btn small" data-staffcast="${rank}" ${prepared && left >= rank ? '' : 'disabled'}>Cast</button>`
         + (spont && spont.slots[rank] ? ` <button type="button" class="btn small" data-staffslot="${rank}" title="Spend 1 charge and one of your ${ordinal(rank)}-rank spell slots" ${prepared && left >= 1 && slotsLeft > 0 ? '' : 'disabled'}>1 + slot</button>` : ''),
@@ -663,9 +739,11 @@ TAB_RENDER.spells = (el) => {
   const entryHtml = (e) => {
     let html = '';
       const used = state.used[e.id] || {};
-      html += `<section class="card" style="background:transparent"><div class="sc-head"><h3>${esc(e.label)}</h3><div class="sc-stats"><span class="sc-stat">${esc(titleCase(e.trad || '—'))} ${esc(e.type)}</span><span class="sc-stat">Attack<b>${signed(e.attack)}</b></span><span class="sc-stat">DC<b>${e.dc}</b></span>${e.psiCantrips?.length ? `<span class="sc-stat">Focus points<b>${state.focus}/${sc.focus.max || ch.focusMax}</b></span>` : ''}</div></div>`;
+      html += `<section class="card" style="background:transparent;--sp-act:${e.type === 'prepared' && !readOnly ? 120 : 0}px"><div class="sc-head"><h3>${esc(e.label)}</h3><div class="sc-stats"><span class="sc-stat">${esc(titleCase(e.trad || '—'))} ${esc(e.type)}</span><span class="sc-stat">Attack<b>${signed(e.attack)}</b></span><span class="sc-stat">DC<b>${e.dc}</b></span>${e.psiCantrips?.length ? `<span class="sc-stat">Focus points<b>${state.focus}/${sc.focus.max || ch.focusMax}</b></span>` : ''}${e.psiCantrips && ch.ownedSlugs.has('unleash-psyche') && !readOnly ? `<button type="button" class="btn small ${state.unleashed ? 'primary' : ''}" data-unleash aria-pressed="${state.unleashed}" title="Unleash Psyche: 2 rounds; afterwards Stupefied 1 for 2 rounds">${state.unleashed ? 'Psyche unleashed' : 'Unleash Psyche'}</button>` : ''}</div></div>`;
+      const ul = !!(e.psiCantrips && state.unleashed); // damage columns include Unleash Psyche's bonus
       if (e.note) html += `<p class="small muted">${esc(e.note)}</p>`;
-      if (e.psiCantrips && state.unleashed) html += `<p class="notice small"><b>Psyche unleashed.</b> Damaging spells you cast with your psychic spellcasting get a status bonus to their initial damage of double the spell’s rank (your cantrips: <b>+${2 * sc.cantripRank}</b>). Each creature takes it only once per spell.</p>`;
+      if (e.psiCantrips && state.unleashed) html += `<p class="notice small"><b>Psyche unleashed.</b> Damaging spells you cast with your psychic spellcasting get a status bonus to their initial damage of double the spell’s rank, included in the Damage column below. Each creature takes it only once per spell.</p>`;
+      html += spellHead();
       if (e.type === 'prepared') {
         const prep = state.prep[e.id] || {};
         const rows = slotRows(e);
@@ -679,6 +757,7 @@ TAB_RENDER.spells = (el) => {
             const kind = row.kind !== 'normal' ? `<span class="slot-kind">${esc(row.label)}</span>` : '';
             if (rec) {
               html += spellRow({ ref: p.ref, rec }, {
+                rank: rank === '0' ? sc.cantripRank : Number(rank), unleashed: ul,
                 cast: rank !== '0' && p.cast, extra: kind + (rec.rank < Number(rank) && !isCantrip(rec) ? ` <span class="badge">heightened ${ordinal(rank)}</span>` : ''),
                 actions: readOnly ? '' : `${rank !== '0' ? `<button type="button" class="btn small ${p.cast ? '' : 'primary'}" data-cast='${esc(JSON.stringify({ e: e.id, s: row.id }))}'>${p.cast ? 'Undo' : 'Cast'}</button>` : ''}<button type="button" class="icon-btn" data-prep='${esc(JSON.stringify({ e: e.id, s: row.id, rank: row.rank, kind: row.kind }))}' aria-label="Change prepared spell">✎</button>`,
               });
@@ -691,7 +770,7 @@ TAB_RENDER.spells = (el) => {
         if (e.granted?.length) html += `<div class="rank-block"><div class="rank-head"><span class="rk">Granted</span></div>${e.granted.map((g) => spellRow(g, { extra: ` <span class="badge">${g.rank ? ordinal(g.rank) : 'cantrip'} · ${esc(g.source)}</span>` })).join('')}</div>`;
       } else {
         const ranks = new Set([0, ...Object.keys(e.slots).map(Number), ...Object.keys(e.repertoire || {}).map(Number)]);
-        if (e.psiCantrips?.length) html += `<div class="rank-block"><div class="rank-head"><span class="rk">Psi</span><span class="small muted">spend 1 Focus Point to amp · tap a cantrip to read its amp</span></div>${e.psiCantrips.map((p) => spellRow(p, { extra: p.unique ? ' <span class="badge accent">unique</span>' : p.parallel ? ' <span class="badge">parallel</span>' : '' })).join('')}</div>`;
+        if (e.psiCantrips?.length) html += `<div class="rank-block"><div class="rank-head"><span class="rk">Psi</span><span class="small muted">spend 1 Focus Point to amp · tap a cantrip to read its amp</span></div>${e.psiCantrips.map((p) => spellRow(p, { unleashed: ul, extra: p.unique ? ' <span class="badge accent">unique</span>' : p.parallel ? ' <span class="badge">parallel</span>' : '' })).join('')}</div>`;
         for (const rank of [...ranks].sort((a, b) => a - b)) {
           const n = e.slots[rank] || 0;
           const list = (e.repertoire || {})[rank] || [];
@@ -699,7 +778,7 @@ TAB_RENDER.spells = (el) => {
           const u = used[rank] || 0;
           html += `<div class="rank-block"><div class="rank-head"><span class="rk">${rank === 0 ? 'Cantrips' : ordinal(rank)}</span>
             ${rank === 0 ? `<span class="small muted">heightened to ${sc.cantripRank}</span>` : `<span class="slot-pips" aria-label="${n - u} of ${n} slots left">${Array.from({ length: n }, (_, i) => `<button type="button" class="${i < u ? 'used' : ''}" data-slot='${esc(JSON.stringify({ e: e.id, r: rank, i }))}' aria-label="Slot ${i + 1}${i < u ? ' (used)' : ''}" ${readOnly ? 'disabled' : ''}></button>`).join('')}</span><span class="small muted">${n - u}/${n}</span>${(e.bonusSlots || []).filter((x) => x.rank === rank).map((x) => { const bu = used[x.key] || 0; return `<span class="slot-pips bonus-pips" title="${esc(x.label)}">${Array.from({ length: x.count }, (_, i) => `<button type="button" class="${i < bu ? 'used' : ''}" data-slot='${esc(JSON.stringify({ e: e.id, r: x.key, i }))}' aria-label="${esc(x.label)}${i < bu ? ' (used)' : ''}" ${readOnly ? 'disabled' : ''}></button>`).join('')}</span><span class="small muted" title="${esc(x.label)}">+1 mind</span>`; }).join('')}`}</div>
-            ${list.map((s) => spellRow(s, { extra: (s.granted ? ' <span class="badge">granted</span>' : '') + ((e.signature || []).includes(s.ref) ? ' <span class="badge accent">signature</span>' : '') })).join('') || (rank > 0 ? '<p class="small muted" style="padding-left:74px;margin:2px 0">No spells of this rank in your repertoire — signature spells and heightening still use these slots.</p>' : '<p class="small muted" style="padding-left:74px;margin:2px 0">None.</p>')}</div>`;
+            ${list.map((s) => spellRow(s, { rank: rank === 0 ? sc.cantripRank : rank, unleashed: ul, extra: (s.granted ? ' <span class="badge">granted</span>' : '') + ((e.signature || []).includes(s.ref) ? ' <span class="badge accent">signature</span>' : '') })).join('') || (rank > 0 ? '<p class="small muted" style="padding-left:74px;margin:2px 0">No spells of this rank in your repertoire — signature spells and heightening still use these slots.</p>' : '<p class="small muted" style="padding-left:74px;margin:2px 0">None.</p>')}</div>`;
         }
         if (e.bonusSlots?.length) html += `<p class="small muted">The pips marked “+1 mind” are Conscious Spell Specialization’s slots: use them only for spells your conscious mind grants.</p>`;
         const sigs = (e.signature || []).map((r) => db.get(r)).filter(Boolean);
@@ -712,7 +791,8 @@ TAB_RENDER.spells = (el) => {
   const focusHtml = () => {
     let html = '';
     if (f.spells.length || f.cantrips.length) {
-      html += `<section class="card" style="background:transparent"><div class="sc-head"><h3>Focus spells</h3><div class="sc-stats"><span class="sc-stat">Focus points<b>${state.focus}/${f.max || ch.focusMax}</b></span></div></div>
+      html += `<section class="card" style="background:transparent;--sp-act:${f.spells.length && !readOnly ? 110 : 0}px"><div class="sc-head"><h3>Focus spells</h3><div class="sc-stats"><span class="sc-stat">Focus points<b>${state.focus}/${f.max || ch.focusMax}</b></span></div></div>
+        ${spellHead()}
         ${f.cantrips.map((s) => spellRow(s, { extra: ` <span class="badge">cantrip</span> <span class="small muted">${esc(s.source)} · DC ${s.dc} · ${signed(s.attack)}</span>` })).join('')}
         ${f.spells.map((s) => spellRow(s, { extra: ` <span class="small muted">${esc(s.source)} · DC ${s.dc} · ${signed(s.attack)}</span>`, actions: readOnly ? '' : `<button type="button" class="btn small" data-focuscast ${state.focus > 0 ? '' : 'disabled'}>Cast (1 FP)</button>` })).join('')}</section>`;
     }
@@ -722,7 +802,8 @@ TAB_RENDER.spells = (el) => {
     let html = '';
     const unpickedInnate = innate.filter((s) => s.pickFor && !s.rec);
     if (innate.some((s) => s.rec) || unpickedInnate.length) {
-      html += `<section class="card" style="background:transparent"><div class="sc-head"><h3>${esc(title)}</h3></div>
+      html += `<section class="card" style="background:transparent;--sp-act:${readOnly ? 0 : 130}px"><div class="sc-head"><h3>${esc(title)}</h3></div>
+        ${spellHead()}
         ${unpickedInnate.length ? `<p class="notice small">${esc([...new Set(unpickedInnate.map((s) => s.source))].join(', '))}: ${unpickedInnate.map((s) => ordinal(s.rank)).join(', ')}-rank spell${unpickedInnate.length > 1 ? 's' : ''} not chosen yet. ${readOnly ? '' : `<a href="builder.html?id=${encodeURIComponent(charRec.id)}">Pick ${unpickedInnate.length > 1 ? 'them' : 'it'} in the builder</a> (Spells step).`}</p>` : ''}
         ${innate.filter((s) => s.rec).map((s) => {
           const c = isCantrip(s.rec);
@@ -733,7 +814,7 @@ TAB_RENDER.spells = (el) => {
           const acts = c || readOnly ? '' : max > 1
             ? `<span class="slot-pips" aria-label="${max - u} of ${max} left today">${Array.from({ length: max }, (_, i) => `<button type="button" class="${i < u ? 'used' : ''}" data-innatepip='${esc(JSON.stringify({ r: s.ref, i }))}' aria-label="Cast ${i + 1}${i < u ? ' (used)' : ''}"></button>`).join('')}</span><span class="small muted">${max - u}/${max}</span>`
             : `<button type="button" class="btn small" data-innate="${esc(s.ref)}">${usedToday ? 'Undo' : 'Cast'}</button>`;
-          return spellRow(s, { cast: !c && usedToday, extra: ` <span class="badge">${c ? 'cantrip' : ordinal(s.rank) + ' · ' + max + '/day'}</span> <span class="small muted">${esc(s.source)} · DC ${s.dc}</span>`, actions: acts });
+          return spellRow(s, { rank: c ? sc.cantripRank : s.rank, cast: !c && usedToday, extra: ` <span class="badge">${c ? 'cantrip' : ordinal(s.rank) + ' · ' + max + '/day'}</span> <span class="small muted">${esc(s.source)} · DC ${s.dc}</span>`, actions: acts });
         }).join('')}</section>`;
     }
     return html;
@@ -790,6 +871,7 @@ TAB_RENDER.spells = (el) => {
   }));
   $$('[data-prep]', el).forEach((b) => (b.onclick = () => openPrepPicker(JSON.parse(b.dataset.prep))));
   $$('[data-focuscast]', el).forEach((b) => (b.onclick = () => { if (state.focus > 0) { state.focus--; change(); } }));
+  $$('[data-unleash]', el).forEach((b) => (b.onclick = toggleUnleash));
   $$('[data-innate]', el).forEach((b) => (b.onclick = () => { const r = b.dataset.innate; if (state.innateUsed[r]) delete state.innateUsed[r]; else state.innateUsed[r] = 1; change(); }));
   const st = state.staff;
   $$('[data-staffprep]', el).forEach((b) => (b.onclick = () => { prepareStaff(ch.inventory.find((it) => it.id === b.dataset.staffprep)); change(); }));
@@ -1460,21 +1542,8 @@ function wire() {
     if (state.raging) { const t = ch.level + ch.attrs.con; state.temp = Math.max(state.temp, t); toast(`Raging: +${t} temporary HP`); }
     change();
   };
-  // Unleash Psyche: on for 2 rounds; when it subsides, Stupefied 1 for 2 rounds and no unleashing for 2 rounds.
   const unl = $('#unleashBtn');
-  if (unl) unl.onclick = () => {
-    if (!state.unleashed) {
-      if (state.conditions.some((c) => c.slug === 'stupefied')) { toast("You can't Unleash your Psyche while Stupefied"); return; }
-      state.unleashed = true;
-      toast('Psyche unleashed for 2 rounds: +2 × rank status damage on your damaging psychic spells');
-    } else {
-      state.unleashed = false;
-      const st = state.conditions.find((c) => c.slug === 'stupefied');
-      if (st) st.value = Math.max(st.value, 1); else state.conditions.push({ slug: 'stupefied', value: 1 });
-      toast("Psyche subsided: Stupefied 1 for 2 rounds, and you can't Unleash again for 2 rounds");
-    }
-    change();
-  };
+  if (unl) unl.onclick = toggleUnleash;
   const sh = $('#shieldBtn');
   if (sh) sh.onclick = () => { state.shieldRaised = !state.shieldRaised; change(); };
   const pBtn = $('#portraitBtn');

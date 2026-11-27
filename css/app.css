@@ -327,17 +327,33 @@ select.needs, .needs { border-color: var(--warn); }
 .slot-pips { display: inline-flex; gap: 4px; }
 .slot-pips button { width: 16px; height: 16px; border-radius: 3px; border: 2px solid var(--accent); background: var(--accent); cursor: pointer; padding: 0; }
 .slot-pips button.used { background: transparent; }
-.spell-line { display: flex; align-items: center; gap: 8px; padding: 5px 0 5px 74px; flex-wrap: wrap; }
+.spell-line { display: grid; grid-template-columns: 34px minmax(0, 1fr) 140px 90px 160px var(--sp-act, 0px); column-gap: 10px; align-items: center; padding: 5px 0 5px 74px; }
+.spell-line .sp-name { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.spell-line .sp-col { font-size: 13px; font-variant-numeric: tabular-nums; }
+.spell-line .sp-dmg { font-weight: 600; }
+.spell-line .sp-plus { color: var(--accent); font-weight: 700; white-space: nowrap; }
+.spell-line .sp-act { display: flex; justify-content: flex-end; align-items: center; gap: 6px; min-width: 0; }
+.spell-line.sp-head { padding-top: 2px; padding-bottom: 2px; min-height: 0 !important; border-bottom: 1px solid var(--line); margin-bottom: 2px; }
+.spell-line.sp-head .sp-col { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.spell-line .sub-narrow { display: none; }
+.spell-line .faint { color: var(--faint); }
 .spell-line .glyph { color: var(--accent); font-size: 12px; min-width: 34px; }
 .spell-line .name { font-weight: 500; cursor: pointer; }
 .spell-line .name:hover { text-decoration: underline dotted; }
-.spell-line .sub { flex-basis: 100%; padding-left: 42px; font-size: 12px; color: var(--muted); margin-top: -2px; }
+.spell-line .sub { grid-column: 2 / -1; font-size: 12px; color: var(--muted); margin-top: -2px; }
 .spell-line.cast .name { text-decoration: line-through; color: var(--faint); }
 .prep-slot { display: flex; align-items: center; gap: 8px; padding: 5px 0 5px 74px; flex-wrap: wrap; }
 .prep-slot .slot-kind { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
 .prep-slot .empty { color: var(--faint); font-style: italic; }
 .prep-slot.cast .name { text-decoration: line-through; color: var(--faint); }
-@media (max-width: 640px) { .spell-line, .prep-slot { padding-left: 4px; } .spell-line .sub { padding-left: 42px; } }
+@media (max-width: 640px) { .spell-line, .prep-slot { padding-left: 4px; } }
+/* Narrow screens: no columns; range, area and defense go back on the line under the name. */
+@media (max-width: 900px) {
+  .spell-line { grid-template-columns: 34px minmax(0, 1fr) auto; }
+  .spell-line .sp-col, .spell-line.sp-head { display: none; }
+  .spell-line .sub-wide { display: none; }
+  .spell-line .sub-narrow { display: block; }
+}
 
 /* ------------------------------------------------------------ level-up */
 .lu-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
