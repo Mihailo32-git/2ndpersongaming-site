@@ -158,7 +158,8 @@ html[data-skin="alchemy"] .sc-head h3::before, html[data-skin="alchemy"] .sub-he
 html[data-skin="steel"] .sc-head h3::before, html[data-skin="steel"] .sub-head::before,
 html[data-skin="frost"] .sc-head h3::before, html[data-skin="frost"] .sub-head::before,
 html[data-skin="blast"] .sc-head h3::before, html[data-skin="blast"] .sub-head::before,
-html[data-skin="mirror"] .sc-head h3::before, html[data-skin="mirror"] .sub-head::before {
+html[data-skin="mirror"] .sc-head h3::before, html[data-skin="mirror"] .sub-head::before,
+html[data-skin="clockwork"] .sc-head h3::before, html[data-skin="clockwork"] .sub-head::before {
   content: ''; display: inline-block; width: .95em; height: .95em; margin-right: .45em; vertical-align: -.1em; background: var(--mark) center / contain no-repeat; }
 
 /* ------------------------------------------------------------ Alchemy: a laboratory — glassware, graph paper, molecules, medicine */
@@ -287,9 +288,10 @@ html[data-skin="frost"] .page-title h1, html[data-skin="frost"] .group > .group-
 html[data-skin="blast"] .page-title h1, html[data-skin="blast"] .group > .group-title h2,
 html[data-skin="alchemy"] .lvl-subhead, html[data-skin="steel"] .lvl-subhead, html[data-skin="frost"] .lvl-subhead, html[data-skin="blast"] .lvl-subhead,
 html[data-skin="alchemy"] .crow.info, html[data-skin="steel"] .crow.info, html[data-skin="frost"] .crow.info, html[data-skin="blast"] .crow.info,
-html[data-skin="mirror"] .page-title h1, html[data-skin="mirror"] .group > .group-title h2, html[data-skin="mirror"] .lvl-subhead, html[data-skin="mirror"] .crow.info {
+html[data-skin="mirror"] .page-title h1, html[data-skin="mirror"] .group > .group-title h2, html[data-skin="mirror"] .lvl-subhead, html[data-skin="mirror"] .crow.info,
+html[data-skin="clockwork"] .page-title h1, html[data-skin="clockwork"] .group > .group-title h2, html[data-skin="clockwork"] .lvl-subhead, html[data-skin="clockwork"] .crow.info {
   text-shadow: 0 0 2px var(--bg), 0 0 6px var(--bg), 0 0 12px var(--bg), 0 0 18px var(--bg); }
-html[data-skin="alchemy"] .footer, html[data-skin="steel"] .footer, html[data-skin="frost"] .footer, html[data-skin="blast"] .footer, html[data-skin="mirror"] .footer { background: var(--topbar); }
+html[data-skin="alchemy"] .footer, html[data-skin="steel"] .footer, html[data-skin="frost"] .footer, html[data-skin="blast"] .footer, html[data-skin="mirror"] .footer, html[data-skin="clockwork"] .footer { background: var(--topbar); }
 
 /* ------------------------------------------------------------ Blastworks: an iron wall, rusty scrap, junk crafting, explosions */
 html[data-skin="blast"] {
@@ -390,3 +392,53 @@ html[data-skin="mirror"] .btn.primary:hover { background: linear-gradient(180deg
 html[data-skin="mirror"] .topbar::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 2px; pointer-events: none;
   background: linear-gradient(90deg, transparent, #6fe3ff 18%, #a98bff 42%, #ff8fd8 62%, #ffd27a 80%, transparent); opacity: .8; }
 html[data-skin="mirror"] .page-title h1 { text-shadow: -1.5px 0 rgba(255, 111, 181, .55), 1.5px 0 rgba(111, 227, 255, .55), 0 0 8px var(--bg), 0 0 16px var(--bg); }
+
+/* ------------------------------------------------------------ Clockwork: polished brass and copper, gears and rivets, blueprint lines */
+html[data-skin="clockwork"] {
+  color-scheme: dark; --ov: 255, 238, 205;
+  --bg: #110d09; --header: #17110b; --panel: #1c150e; --panel2: #251c13; --panel3: #31251a;
+  --line: #3a2c1c; --line2: #4d3a25; --line3: #2a2015;
+  --ink: #f5e9d2; --ink2: #e2cfae; --muted: #b8a17e; --faint: #7d6a50; --heading: #f1c76a;
+  --accent: #e0ad4c; --accent-ink: #1c1203; --accent-soft: #33260f; --accent-line: #7a5a22; --link: #f0c467;
+  --acc-rgb: 224, 173, 76; --acc-hi: #f6d688; --acc-lo: #b07a2c; --acc-edge: #f0c467;
+  --ok: #6fbfa9; --ok-soft: #13261f; --hero: #f1c76a; --warn: #f0a24a; --warn-soft: #36240c; --bad: #e0613f; --bad-ink: #ffb39f; --bad-soft: #321510; --bad-line: #6e2a1b;
+  --r0: #4a3a26; --r1: #5d7f9e; --r2: #4f9c8a; --r3: #b8862e; --r4: #b8613a;
+  --glass: rgba(28, 21, 14, .84); --glass-2: rgba(40, 30, 20, .82); --glass-3: rgba(54, 41, 27, .88); --glass-strong: rgba(20, 15, 10, .97);
+  --glass-line: rgba(240, 196, 103, .13); --glass-line2: rgba(240, 196, 103, .26); --glass-hi: inset 0 1px 0 rgba(255, 236, 190, .07);
+  --shadow: 0 10px 28px rgba(0, 0, 0, .55);
+  --frame: rgba(224, 173, 76, .5); --frame-gap: rgba(8, 6, 3, .62); --frame-inner: rgba(246, 214, 136, .14);
+  --input-bg: rgba(8, 6, 3, .6); --topbar: rgba(20, 15, 10, .93); --hp-fill: linear-gradient(90deg, #b8613a, #e0ad4c, #f6d688); --brand-hue: 200deg;
+  --mark: url(../img/skins/clock-mark.svg);
+  --backdrop:
+    radial-gradient(1200px 900px at 50% 40%, transparent 42%, rgba(0, 0, 0, .6) 100%),
+    radial-gradient(900px 620px at 100% 0%, rgba(240, 180, 80, .13), transparent 62%),
+    radial-gradient(700px 520px at 0% 100%, rgba(200, 110, 60, .1), transparent 65%),
+    url(../img/skins/clock-plate.svg) 0 0 / 360px 360px,
+    linear-gradient(160deg, #18120c, #0e0a07 60%, #140e09);
+  --corner-art: url(../img/skins/clock-gears.svg) right -20px top 50px / 330px auto no-repeat, url(../img/skins/clock-works.svg) left -16px bottom -12px / 290px auto no-repeat;
+}
+html[data-skin="clockwork"] body::after { opacity: .6; }
+/* cards are brushed metal plates, a riveted brass bracket on two corners */
+html[data-skin="clockwork"] .card, html[data-skin="clockwork"] .hero-card, html[data-skin="clockwork"] .sidepanel, html[data-skin="clockwork"] .sheet-cols > .col-main {
+  box-shadow: inset 0 0 0 3px var(--frame-gap), inset 0 0 0 4px var(--frame-inner), inset 0 1px 0 rgba(255, 230, 170, .08), var(--shadow); }
+html[data-skin="clockwork"] .card, html[data-skin="clockwork"] .sidepanel, html[data-skin="clockwork"] .sheet-cols > .col-main {
+  background: url(../img/skins/clock-bracket-tl.svg) left 0 top 0 / 30px no-repeat, url(../img/skins/clock-bracket-br.svg) right 0 bottom 0 / 30px no-repeat,
+    linear-gradient(var(--glass), var(--glass)), url(../img/skins/clock-brushed.svg) 0 0 / 200px 200px; }
+html[data-skin="clockwork"] .hero-card { background: url(../img/skins/clock-key.svg) right 10px bottom 6px / 74px auto no-repeat,
+  url(../img/skins/clock-bracket-tl.svg) left 0 top 0 / 30px no-repeat, url(../img/skins/clock-bracket-br.svg) right 0 bottom 0 / 30px no-repeat,
+  linear-gradient(var(--glass), var(--glass)), url(../img/skins/clock-brushed.svg) 0 0 / 200px 200px; }
+html[data-skin="clockwork"] section.card[style*="background:transparent"] { background: transparent !important; box-shadow: none; }
+/* engraved brass titles */
+html[data-skin="clockwork"] h1, html[data-skin="clockwork"] .hero-id h1 { text-shadow: 0 1px 0 rgba(0, 0, 0, .7), 0 0 14px rgba(224, 173, 76, .25); }
+html[data-skin="clockwork"] .sc-head h3, html[data-skin="clockwork"] .modal header h2 { text-shadow: 0 1px 0 rgba(0, 0, 0, .65); }
+html[data-skin="clockwork"] .page-title h1 { text-shadow: 0 1px 0 rgba(0, 0, 0, .7), 0 0 8px var(--bg), 0 0 16px var(--bg); }
+/* polished brass buttons */
+html[data-skin="clockwork"] .btn.primary, html[data-skin="clockwork"] .boost-grid button.on {
+  background: linear-gradient(180deg, #fbe7ad 0%, #e6b85a 42%, #b8822e 54%, #dcae55 100%); border-color: #f6d688; color: #1c1203;
+  box-shadow: 0 3px 10px rgba(224, 173, 76, .25), inset 0 1px 0 #fff5d6, inset 0 -1px 0 rgba(80, 50, 10, .5); }
+html[data-skin="clockwork"] .btn.primary:hover { background: linear-gradient(180deg, #fff0c4 0%, #efc56a 45%, #c8913a 55%, #e8bd66 100%); }
+/* a brass rail under the top bar, riveted every few centimetres */
+html[data-skin="clockwork"] .topbar::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 5px; pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, #fff3cf 0 .9px, #b07a2c 1.4px, #5c3b12 2px, transparent 2.4px) 12px 0 / 48px 5px repeat-x,
+    linear-gradient(180deg, #f6d688, #c48d36 55%, #6f4815); box-shadow: 0 2px 6px rgba(0, 0, 0, .55); }
+
