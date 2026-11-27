@@ -6,7 +6,7 @@
 @font-face { font-family: 'EB Garamond'; font-style: italic; font-display: swap; font-weight: 400 800; src: url(../fonts/eb-garamond-latin-wght-italic.woff2) format('woff2'); }
 
 /* ------------------------------------------------------------ shared: type and frames */
-html[data-skin] { --display: 'Cinzel', 'Trajan Pro', Georgia, serif; --book: 'EB Garamond', Garamond, Georgia, serif; }
+html[data-skin] { --display: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --book: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
 html[data-skin] h1, html[data-skin] h2, html[data-skin] h3, html[data-skin] .brand, html[data-skin] .sc-head h3,
 html[data-skin] .hero-id h1, html[data-skin] .page-title h1, html[data-skin] .sub-head, html[data-skin] .modal header h2 { font-family: var(--display); font-weight: 700; letter-spacing: .04em; color: var(--heading); }
 html[data-skin] .hero-id h1 { font-size: 25px; }
@@ -445,16 +445,16 @@ html[data-skin="clockwork"] .topbar::after { content: ''; position: absolute; le
     linear-gradient(180deg, #f6d688, #c48d36 55%, #6f4815); box-shadow: 0 2px 6px rgba(0, 0, 0, .55), 0 3px 14px rgba(255, 211, 106, .2); }
 /* the HP bar glows like gold thread */
 html[data-skin="clockwork"] .hpbar > div:first-child:not(.low):not(.crit) { box-shadow: 0 0 8px rgba(255, 211, 106, .45); }
-/* a clean face instead of Cinzel and Garamond: Inter, engraved-label capitals for headings, tabs and labels */
-html[data-skin="clockwork"] { --display: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; --book: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
-html[data-skin="clockwork"] .sub-head, html[data-skin="clockwork"] .sc-head h3, html[data-skin="clockwork"] .nav a, html[data-skin="clockwork"] .tabs button,
-html[data-skin="clockwork"] .ss .k, html[data-skin="clockwork"] .pill-label, html[data-skin="clockwork"] .tile-head, html[data-skin="clockwork"] .rank-head .rk,
-html[data-skin="clockwork"] .group > .group-title h2, html[data-skin="clockwork"] .modal header h2 { text-transform: uppercase; letter-spacing: .09em; font-weight: 600; }
-html[data-skin="clockwork"] .nav a, html[data-skin="clockwork"] .tabs button { font-size: 13px; }
-html[data-skin="clockwork"] .sub-head, html[data-skin="clockwork"] .sc-head h3, html[data-skin="clockwork"] .modal header h2 { font-size: 13.5px; }
-html[data-skin="clockwork"] .hero-id h1, html[data-skin="clockwork"] .page-title h1 { font-weight: 700; letter-spacing: .01em; }
-html[data-skin="clockwork"] .name, html[data-skin="clockwork"] .sk-name, html[data-skin="clockwork"] .identity { font-size: 15px; font-weight: 600; letter-spacing: 0; }
-html[data-skin="clockwork"] .rules-text { font-size: 15px; line-height: 1.55; }
-html[data-skin="clockwork"] .spell-line .sub, html[data-skin="clockwork"] .identity { font-size: 13.5px; }
+/* Every theme uses Inter (clean, like the default look): spaced capitals for headings, tabs and labels, normal case for names and text.
+   Cinzel and EB Garamond stay in fonts/ but are no longer used. */
+html[data-skin] .sub-head, html[data-skin] .sc-head h3, html[data-skin] .nav a, html[data-skin] .tabs button,
+html[data-skin] .ss .k, html[data-skin] .pill-label, html[data-skin] .tile-head, html[data-skin] .rank-head .rk,
+html[data-skin] .group > .group-title h2, html[data-skin] .modal header h2 { text-transform: uppercase; letter-spacing: .09em; font-weight: 600; }
+html[data-skin] .nav a, html[data-skin] .tabs button { font-size: 13px; }
+html[data-skin] .sub-head, html[data-skin] .sc-head h3, html[data-skin] .modal header h2 { font-size: 13.5px; }
+html[data-skin] .hero-id h1, html[data-skin] .page-title h1 { font-weight: 700; letter-spacing: .01em; }
+html[data-skin] .name, html[data-skin] .sk-name, html[data-skin] .identity { font-size: 15px; font-weight: 600; letter-spacing: 0; }
+html[data-skin] .rules-text { font-size: 15px; line-height: 1.55; }
+html[data-skin] .spell-line .sub, html[data-skin] .identity { font-size: 13.5px; }
 
-html[data-skin="clockwork"] .hero-id .identity, html[data-skin="clockwork"] .identity { font-weight: 500; font-size: 13.5px; }
+html[data-skin] .hero-id .identity, html[data-skin] .identity { font-weight: 500; font-size: 13.5px; }
