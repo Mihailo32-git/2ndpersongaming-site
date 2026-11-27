@@ -1213,7 +1213,17 @@ export class Engine {
     const spec = feats.has('greater-weapon-specialization') || feats.has('greater-weapon-specialization-barbarian') ? [0, 0, 4, 6, 8]
       : (feats.has('weapon-specialization') || feats.has('psychic-weapon-specialization')) ? [0, 0, 2, 3, 4] : [0, 0, 0, 0, 0];
     const weapons = [];
-    for (const it of inv) if (it.rec.type === 'weapon' && (it.equipped || (it.rec.traits || []).includes('bomb'))) weapons.push({ rec: it.rec, item: it });
+    for (const it of inv) {
+      if (!(it.rec.type === 'weapon' && (it.equipped || (it.rec.traits || []).includes('bomb')))) continue;
+      const m = it.rec.melee;
+      if (!m) { weapons.push({ rec: it.rec, item: it }); continue; }
+      // A combination weapon (Piercing Wind, Axe Musket…): its melee half has its own damage die and type, group and
+      // traits; runes and potency are shared. Melee first, so Double Slice picks it.
+      const th = (m.traits || []).find((t) => /^thrown-\d+$/.test(t));
+      weapons.push({ rec: { ...it.rec, name: it.rec.name + ' (melee)', group: m.group || it.rec.group, traits: [...new Set(['combination', ...(m.traits || [])])],
+        damage: { dice: it.rec.damage?.dice || 1, die: m.die, type: m.type || it.rec.damage?.type }, range: th ? Number(th.split('-')[1]) : null, reload: null, melee: null }, item: it });
+      weapons.push({ rec: { ...it.rec, name: it.rec.name + ' (ranged)' }, item: it });
+    }
     // Versatile vials thrown as bombs, and bombs made with Advanced Alchemy this morning.
     const al = state.alchemy || {};
     const vials = ch.resources?.versatileVials;

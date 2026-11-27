@@ -39,6 +39,11 @@ function makeFinder(db) {
     const raw = String(name).replace(/\s*\[(?:placeholder|reaction|free action|one action|two actions)\]\s*$/i, '');
     const base = [raw, raw.replace(/\s*\([^)]*\)\s*$/, ''), raw.replace(/^[^:]+:\s*/, ''), raw.replace(/^[^:]+:\s*/, '').replace(/\s*\([^)]*\)\s*$/, ''),
       raw.replace(/ (?:I|II|III)$/, ''), raw.replace(/judgement/gi, 'judgment')];
+    // A combination weapon's two halves: "Piercing Wind - Ranged" / "- Melee" are the one weapon.
+    if (/ - (?:melee|ranged)$/i.test(raw)) base.push(raw.replace(/ - (?:melee|ranged)$/i, ''));
+    // "Elemental Ammunition - Fire (Moderate)" is "Elemental Ammunition (Moderate, Fire)" here; "X - Fire" is "X (Fire)".
+    const dash = raw.match(/^(.+?) - (.+?)(?: \((.+)\))?$/);
+    if (dash) base.push(...(dash[3] ? [`${dash[1]} (${dash[3]}, ${dash[2]})`, `${dash[1]} (${dash[2]}, ${dash[3]})`, `${dash[1]} (${dash[3]})`] : [`${dash[1]} (${dash[2]})`]));
     const tries = [];
     for (const t of base) { tries.push(t); if (PB_NAMES[t]) tries.push(PB_NAMES[t]); }
     for (const t of tries) {
@@ -470,9 +475,19 @@ export function convertPathbuilder(data, db, engine) {
     }
     return skipped;
   };
+  const comboSeen = new Set();
   for (const w of pb.weapons || []) {
+    // Fists are on every sheet already. Runes on them come from handwraps, which arrive with the other items.
+    if (norm(w.name) === 'fist') {
+      const runed = Number(w.pot) || w.str || (w.runes || []).length;
+      const wraps = [...(pb.weapons || []), ...(pb.equipment || [])].some((x) => /handwraps/i.test(Array.isArray(x) ? x[0] : x?.name || ''));
+      if (runed && !wraps) notes.push('Fist: has runes in Pathbuilder. Add Handwraps of Mighty Blows to the inventory and put the runes on them.');
+      continue;
+    }
     const rec = find('equipment', w.name);
     if (!rec) { missing('Weapon', w.display || w.name); continue; }
+    // A combination weapon comes as two entries (melee and ranged): it's one weapon.
+    if (/ - (?:melee|ranged)$/i.test(w.name || '')) { if (comboSeen.has(rec.slug)) continue; comboSeen.add(rec.slug); }
     const wi = item(rec, { qty: Number(w.qty) || 1, equipped: true, potency: Number(w.pot) || 0, striking: STRIKING[norm(w.str).replace(/ /g, '')] || 0 });
     b.inventory.push(wi);
     const extras = applyRunes(wi, 'weapon', w.runes, w.mat);
