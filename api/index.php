@@ -249,7 +249,7 @@ function canMail(): bool { global $config; return !empty($config['smtp_host']) |
 function sendMail(string $to, string $subject, string $text): bool {
     global $config;
     $from = mailFrom();
-    $fromName = (string)($config['mail_from_name'] ?? 'PF2e Characters');
+    $fromName = (string)($config['mail_from_name'] ?? '2nd Person Gaming');
     if (!empty($config['mail_log'])) {
         return (bool)file_put_contents($config['mail_log'], "To: $to\nSubject: $subject\n\n$text\n----\n", FILE_APPEND);
     }
@@ -375,8 +375,8 @@ switch ("$method $route") {
             db()->prepare('DELETE FROM password_resets WHERE user_id = ? OR expires_at < ?')->execute([$u['id'], now()]);
             db()->prepare('INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES (?, ?, ?)')->execute([hash('sha256', $token), $u['id'], now(3600)]);
             $link = siteUrl() . '/reset.html#token=' . $token;
-            $sent = sendMail($email, 'Reset your PF2e Characters password',
-                "Hi {$u['name']},\n\nSomeone (hopefully you) asked to reset the password for your PF2e Characters account.\n\nSet a new password here (the link works for one hour):\n$link\n\nIf you didn't ask for this, ignore this email — your password stays the same.\n");
+            $sent = sendMail($email, 'Reset your 2nd Person Gaming password',
+                "Hi {$u['name']},\n\nSomeone (hopefully you) asked to reset the password for your 2nd Person Gaming account.\n\nSet a new password here (the link works for one hour):\n$link\n\nIf you didn't ask for this, ignore this email — your password stays the same.\n");
             if (!$sent) fail(500, 'The email could not be sent. Try again later or ask your GM.');
         }
         ok(['ok' => true]);

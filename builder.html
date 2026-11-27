@@ -9,9 +9,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta name="apple-mobile-web-app-title" content="PF2e">
-<title>Character Builder — PF2e</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22%3E%3Crect width=%2224%22 height=%2224%22 rx=%225%22 fill=%22%2312151b%22/%3E%3Cg fill=%22none%22 stroke=%22%234fb8e8%22 stroke-width=%222%22%3E%3Cpath d=%22M12 3l7 4.5v9L12 21l-7-4.5v-9z%22/%3E%3Cpath d=%22M12 7.5v9M8 10l8 4M16 10l-8 4%22/%3E%3C/g%3E%3C/svg%3E">
+<meta name="apple-mobile-web-app-title" content="2nd Person">
+<title>Character Builder — 2nd Person Gaming</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2024%2024%22%3E%3Crect%20width=%2224%22%20height=%2224%22%20rx=%225%22%20fill=%22%2312151b%22/%3E%3Cg%20transform=%22translate%2812%2012%29%20scale%28.86%29%20translate%28-12%20-12%29%22%20fill=%22none%22%20stroke=%22%234fb8e8%22%20stroke-linejoin=%22round%22%20stroke-linecap=%22round%22%3E%3Cpath%20d=%22M12%202%20L20.66%207%20L20.66%2017%20L12%2022%20L3.34%2017%20L3.34%207Z%22%20stroke-width=%222%22/%3E%3Cpath%20d=%22M12%207.2%20L17.4%2016.4%20L6.6%2016.4Z%22%20stroke-width=%221.8%22/%3E%3Cpath%20d=%22M12%207.2%20L12%202%20M12%207.2%20L3.34%207%20M12%207.2%20L20.66%207%20M6.6%2016.4%20L3.34%207%20M6.6%2016.4%20L3.34%2017%20M6.6%2016.4%20L12%2022%20M17.4%2016.4%20L20.66%207%20M17.4%2016.4%20L20.66%2017%20M17.4%2016.4%20L12%2022%22%20stroke-width=%221.2%22/%3E%3C/g%3E%3C/svg%3E">
 <link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <script>try{var t=localStorage.getItem('pf2e.theme')||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'),s=localStorage.getItem('pf2e.skin'),m={tome:'light',grove:'dark',cosmos:'dark',alchemy:'dark',steel:'dark',frost:'light',blast:'dark',mirror:'dark'};if(m[s]){document.documentElement.dataset.skin=s;t=m[s];}document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme='dark';}</script>
 <link rel="stylesheet" href="css/app.css">
@@ -20,7 +20,7 @@
 </head>
 <body>
 <header class="topbar">
-  <a class="brand" href="index.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4fb8e8" stroke-width="2" aria-hidden="true"><path d="M12 2l8 5v10l-8 5-8-5V7z"/><path d="M12 7v10M7 9.5l10 5M17 9.5l-10 5"/></svg><span>PF2e Characters</span></a>
+  <a class="brand" href="index.html"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4fb8e8" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M12 2 L20.66 7 L20.66 17 L12 22 L3.34 17 L3.34 7Z"/><path d="M12 7.2 L17.4 16.4 L6.6 16.4Z"/><path d="M12 7.2 L12 2 M12 7.2 L3.34 7 M12 7.2 L20.66 7 M6.6 16.4 L3.34 7 M6.6 16.4 L3.34 17 M6.6 16.4 L12 22 M17.4 16.4 L20.66 7 M17.4 16.4 L20.66 17 M17.4 16.4 L12 22" stroke-width="1.3"/></svg><span>2nd Person<span class="brand-x"> Gaming</span></span></a>
   <span class="context" id="ctx"></span>
   <span class="spacer"></span>
   <span id="saveState" class="save-state"></span>

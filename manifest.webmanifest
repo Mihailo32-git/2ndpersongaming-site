@@ -1,7 +1,7 @@
 {
-  "name": "PF2e Characters",
-  "short_name": "PF2e",
-  "description": "Pathfinder 2e character builder and sheet.",
+  "name": "2nd Person Gaming",
+  "short_name": "2nd Person",
+  "description": "Pathfinder 2e character builder, sheet and GM screen.",
   "id": "./",
   "start_url": "./index.html",
   "scope": "./",
