@@ -104,7 +104,14 @@ function flagValue(flags, path) {
 }
 
 function sameValue(a, b) {
-  return a === b || JSON.stringify(a) === JSON.stringify(b);
+  if (a === b) return true;
+  // An option that has gained a detail since it was saved (Child of Notoriety's options now also name their Lore):
+  // a saved object still matches the option whose fields it has.
+  if (a && b && typeof a === 'object' && typeof b === 'object' && !Array.isArray(a) && !Array.isArray(b)) {
+    const kb = Object.keys(b);
+    return kb.length > 0 && kb.every((k) => JSON.stringify(a[k]) === JSON.stringify(b[k]));
+  }
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 // Skill feats tied only to Strength- or Dexterity-based skills (from their prerequisites) don't fit Skillful Lessons.
@@ -419,6 +426,8 @@ export class Engine {
       const avail = opts.filter((x) => x.available !== false);
       if (saved === undefined && Array.isArray(r.choices) && avail.length === 1 && opts.length > 1) saved = avail[0].value;
       const match = saved !== undefined ? opts.find((x) => sameValue(x.value, saved)) : null;
+      // An object option is used as it is now, with any detail it gained since it was saved.
+      if (match && match.value && typeof match.value === 'object') saved = match.value;
       const choice = { key: inst.key, flag, prompt: r.prompt || 'Make a choice', options: opts, value: match ? saved : null, item: inst, domainChoice: r.choices === 'system.details.deities.domains', deityChoice: r.choices?.itemType === 'deity' };
       ch.choices.push(choice);
       if (match) {

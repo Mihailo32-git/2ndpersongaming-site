@@ -244,6 +244,7 @@ export function convertPathbuilder(data, db, engine) {
     for (const a of awarded) if (a.extra) { const inst = ch.feats.find((x) => x.rec.slug === a.rec.slug); if (inst && !featHints[inst.key]) featHints[inst.key] = [a.extra]; }
   };
   const sibUsed = {};
+  const kindUsed = {};
   const grantUsed = new Set();
   for (let pass = 0; pass < 25; pass++) {
     ch = engine.compute(b);
@@ -281,6 +282,26 @@ export function convertPathbuilder(data, db, engine) {
             const first = (o) => { let best = Infinity; for (const n of names(o)) { const i = textOrder.findIndex((t) => t === n || t === n + ' ' + itemWord || [...nouns].some((w) => t === n + ' ' + w)); if (i >= 0 && i < best) best = i; } return best; };
             pick = hits.filter((o) => !used.has(o.value)).sort((x, y) => first(x) - first(y))[0] || null;
             if (pick) used.add(pick.value);
+          }
+        }
+        // The same kind of choice on different features: a bard's muse (or Bard Dedication's) and Multifarious Muse's
+        // second muse. Pathbuilder lists features in the order they were gained, so the feature gained first takes the
+        // first of the named options, the next one the next.
+        if (!pick && hits.length > 1) {
+          const kind = norm(c.prompt || '');
+          const lvOf = (x) => x.item?.slot?.level ?? (String(x.key).startsWith('cf:') ? (x.item?.rec?.level ?? 1) : 99);
+          const peers = ch.choices.filter((x) => x !== c && x.value == null && norm(x.prompt || '') === kind && x.options.some((o) => named(o)));
+          const earliest = [c, ...peers].sort((a, b) => lvOf(a) - lvOf(b))[0];
+          // Compared by name: one feature stores "maestro", another "@classfeatures/maestro".
+          const taken = kindUsed[kind];
+          const free = taken ? hits.filter((o) => !taken.has(norm(o.label))) : hits;
+          // A later one of the kind, once the earlier ones are made: the named option nobody has taken yet.
+          if (!peers.length && taken && free.length === 1) { pick = free[0]; taken.add(norm(pick.label)); }
+          else if (peers.length && earliest === c) {
+            const used = kindUsed[kind] = kindUsed[kind] || new Set();
+            const pos = (o) => { let best = Infinity; for (const n of names(o)) { const i = textOrder.findIndex((t) => t === n || [...nouns].some((w) => t === n + ' ' + w)); if (i >= 0 && i < best) best = i; } return best; };
+            pick = hits.filter((o) => !used.has(norm(o.label))).sort((x, y) => pos(x) - pos(y))[0] || null;
+            if (pick) used.add(norm(pick.label));
           }
         }
       }
@@ -331,6 +352,19 @@ export function convertPathbuilder(data, db, engine) {
     (b.choices[c.key] = b.choices[c.key] || {})[c.flag] = best.value;
     ch = engine.compute(b);
   }
+  // Skill choices with a version per rank (Captivator Dedication: "trained in Deception or Diplomacy, or expert if you
+  // already were"): keep which skill, but set the choice aside until the class and Intelligence skills are handed out,
+  // then take the version that applies. Otherwise it trains a skill a regular pick would have, and its expert is lost.
+  const tierOf = (c) => c.options.some((o, i) => c.options.some((p, j) => j !== i && norm(p.label) === norm(o.label)));
+  const tiered = [];
+  for (const c of ch.choices) {
+    if (c.value == null || !tierOf(c)) continue;
+    const now = c.options.find((o) => o.value === c.value);
+    if (!now || !skillOf(now)) continue;
+    tiered.push({ key: c.key, flag: c.flag, label: norm(now.label) });
+    delete b.choices[c.key][c.flag];
+  }
+  if (tiered.length) ch = engine.compute(b);
   const cur = { ...ch.ranks.skills };
   const curLore = {};
   const loreKey = (n) => Object.keys(ch.ranks.lores).find((k) => norm(k).replace(/ lore$/, '') === norm(n)) || n;
@@ -342,6 +376,16 @@ export function convertPathbuilder(data, db, engine) {
   for (let i = 0; i < (ch.classSkillPicks || 0); i++) { const s = untrained()[0]; if (!s) break; b.skills.class.push(s); trainOne(s); }
   for (const [lv, n] of Object.entries(ch.intPicks || {})) {
     for (let i = 0; i < n; i++) { const s = untrained()[0]; if (!s) break; (b.skills.int[lv] = b.skills.int[lv] || []).push(s); trainOne(s); }
+  }
+  if (tiered.length) {
+    const chT = engine.compute(b);
+    for (const t of tiered) {
+      const c = chT.choices.find((x) => x.key === t.key && x.flag === t.flag);
+      const opt = c && (c.options.find((o) => o.available !== false && norm(o.label) === t.label) || c.options.find((o) => norm(o.label) === t.label));
+      if (opt) (b.choices[t.key] = b.choices[t.key] || {})[t.flag] = opt.value;
+    }
+    const chU = engine.compute(b);
+    for (const k of Object.keys(cur)) cur[k] = Math.max(cur[k] || 0, chU.ranks.skills[k] || 0);
   }
   for (const lv of ch.increaseLevels || []) {
     const limit = lv >= 15 ? 4 : lv >= 7 ? 3 : 2;
