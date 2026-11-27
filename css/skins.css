@@ -1,5 +1,5 @@
 /* Fantasy skins (preview). Same layout as the default theme: only colours, fonts, frames and backgrounds change.
-   html[data-skin=tome|grove|cosmos|alchemy|steel|frost|blast]; tome and frost also set data-theme=light, the others data-theme=dark.
+   html[data-skin=tome|grove|cosmos|alchemy|steel|frost|blast|mirror]; tome and frost also set data-theme=light, the others data-theme=dark.
    Fonts are self-hosted (fonts/, SIL Open Font License). Numbers keep the default fonts so they stay easy to read. */
 @font-face { font-family: 'Cinzel'; font-style: normal; font-display: swap; font-weight: 400 900; src: url(../fonts/cinzel-latin-wght-normal.woff2) format('woff2'); }
 @font-face { font-family: 'EB Garamond'; font-style: normal; font-display: swap; font-weight: 400 800; src: url(../fonts/eb-garamond-latin-wght-normal.woff2) format('woff2'); }
@@ -157,7 +157,8 @@ html[data-skin="cosmos"] .card, html[data-skin="cosmos"] .hero-card, html[data-s
 html[data-skin="alchemy"] .sc-head h3::before, html[data-skin="alchemy"] .sub-head::before,
 html[data-skin="steel"] .sc-head h3::before, html[data-skin="steel"] .sub-head::before,
 html[data-skin="frost"] .sc-head h3::before, html[data-skin="frost"] .sub-head::before,
-html[data-skin="blast"] .sc-head h3::before, html[data-skin="blast"] .sub-head::before {
+html[data-skin="blast"] .sc-head h3::before, html[data-skin="blast"] .sub-head::before,
+html[data-skin="mirror"] .sc-head h3::before, html[data-skin="mirror"] .sub-head::before {
   content: ''; display: inline-block; width: .95em; height: .95em; margin-right: .45em; vertical-align: -.1em; background: var(--mark) center / contain no-repeat; }
 
 /* ------------------------------------------------------------ Alchemy: a laboratory — glassware, graph paper, molecules, medicine */
@@ -285,9 +286,10 @@ html[data-skin="steel"] .page-title h1, html[data-skin="steel"] .group > .group-
 html[data-skin="frost"] .page-title h1, html[data-skin="frost"] .group > .group-title h2,
 html[data-skin="blast"] .page-title h1, html[data-skin="blast"] .group > .group-title h2,
 html[data-skin="alchemy"] .lvl-subhead, html[data-skin="steel"] .lvl-subhead, html[data-skin="frost"] .lvl-subhead, html[data-skin="blast"] .lvl-subhead,
-html[data-skin="alchemy"] .crow.info, html[data-skin="steel"] .crow.info, html[data-skin="frost"] .crow.info, html[data-skin="blast"] .crow.info {
+html[data-skin="alchemy"] .crow.info, html[data-skin="steel"] .crow.info, html[data-skin="frost"] .crow.info, html[data-skin="blast"] .crow.info,
+html[data-skin="mirror"] .page-title h1, html[data-skin="mirror"] .group > .group-title h2, html[data-skin="mirror"] .lvl-subhead, html[data-skin="mirror"] .crow.info {
   text-shadow: 0 0 2px var(--bg), 0 0 6px var(--bg), 0 0 12px var(--bg), 0 0 18px var(--bg); }
-html[data-skin="alchemy"] .footer, html[data-skin="steel"] .footer, html[data-skin="frost"] .footer, html[data-skin="blast"] .footer { background: var(--topbar); }
+html[data-skin="alchemy"] .footer, html[data-skin="steel"] .footer, html[data-skin="frost"] .footer, html[data-skin="blast"] .footer, html[data-skin="mirror"] .footer { background: var(--topbar); }
 
 /* ------------------------------------------------------------ Blastworks: an iron wall, rusty scrap, junk crafting, explosions */
 html[data-skin="blast"] {
@@ -339,3 +341,52 @@ html[data-skin="blast"] .btn.primary { box-shadow: 0 3px 14px rgba(255, 110, 20,
 html[data-skin="blast"] .topbar { background: linear-gradient(var(--topbar), var(--topbar)), url(../img/skins/blast-iron.svg) 0 -8px / 480px 480px; box-shadow: none; }
 html[data-skin="blast"] .topbar::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 8px; pointer-events: none;
   background: repeating-linear-gradient(-45deg, #f2c230 0 9px, #1a1814 9px 18px); opacity: .85; box-shadow: 0 2px 6px rgba(0, 0, 0, .5); }
+
+/* ------------------------------------------------------------ Mirrorshard: shattered mirrors, glass and fractured reality */
+html[data-skin="mirror"] {
+  color-scheme: dark; --ov: 230, 238, 255;
+  --bg: #0a0c12; --header: #0f1219; --panel: #121622; --panel2: #1a1f2e; --panel3: #242a3d;
+  --line: #252b3d; --line2: #333b52; --line3: #1b2030;
+  --ink: #eef2fa; --ink2: #ccd4e4; --muted: #9aa4bb; --faint: #646d84; --heading: #f4f7ff;
+  --accent: #8fe3ff; --accent-ink: #061018; --accent-soft: #14283a; --accent-line: #2f5f7a; --link: #a9ebff;
+  --acc-rgb: 143, 227, 255; --acc-hi: #ffffff; --acc-lo: #aab6ca; --acc-edge: #e6ecf5;
+  --ok: #7fe0b0; --ok-soft: #142a22; --hero: #ffd27a; --warn: #ffd27a; --warn-soft: #33290f; --bad: #ff6f8f; --bad-ink: #ffb0c2; --bad-soft: #2e1420; --bad-line: #66293f;
+  --r0: #333b52; --r1: #3f6ea8; --r2: #2f8a78; --r3: #a3772a; --r4: #8657c9;
+  --glass: rgba(18, 22, 34, .8); --glass-2: rgba(28, 33, 48, .78); --glass-3: rgba(40, 47, 66, .86); --glass-strong: rgba(13, 16, 24, .96);
+  --glass-line: rgba(220, 230, 250, .12); --glass-line2: rgba(220, 230, 250, .24); --glass-hi: inset 0 1px 0 rgba(255, 255, 255, .08);
+  --shadow: 0 10px 30px rgba(0, 0, 0, .45);
+  --frame: rgba(210, 222, 245, .3); --frame-gap: rgba(5, 6, 10, .6); --frame-inner: rgba(143, 227, 255, .14);
+  --input-bg: rgba(5, 6, 10, .6); --topbar: rgba(12, 14, 21, .9); --hp-fill: linear-gradient(90deg, #6fe3ff, #a98bff, #ff8fd8); --brand-hue: 0deg;
+  --mark: url(../img/skins/mirror-mark.svg);
+  --backdrop:
+    radial-gradient(1200px 900px at 50% 40%, transparent 45%, rgba(0, 0, 0, .55) 100%),
+    radial-gradient(900px 600px at 100% 0%, rgba(143, 227, 255, .1), transparent 62%),
+    radial-gradient(800px 600px at 0% 100%, rgba(255, 111, 181, .08), transparent 65%),
+    radial-gradient(700px 500px at 40% 60%, rgba(169, 139, 255, .06), transparent 70%),
+    url(../img/skins/mirror-facets.svg) 0 0 / 240px 240px,
+    #0a0c12;
+  --corner-art: url(../img/skins/mirror-shatter.svg) right -20px top 46px / 500px auto no-repeat, url(../img/skins/mirror-kaleido.svg) left -20px bottom -20px / 440px auto no-repeat;
+}
+html[data-skin="mirror"] body::after { opacity: .7; }
+/* glass panes: a reflective sheen across each card, its edges split pink and cyan like light through a crack */
+html[data-skin="mirror"] .card, html[data-skin="mirror"] .hero-card, html[data-skin="mirror"] .sidepanel, html[data-skin="mirror"] .sheet-cols > .col-main {
+  box-shadow: inset 0 0 0 3px var(--frame-gap), inset 0 0 0 4px var(--frame-inner), inset 1px 0 0 rgba(255, 111, 181, .22), inset -1px 0 0 rgba(111, 227, 255, .22), var(--shadow); }
+html[data-skin="mirror"] .card, html[data-skin="mirror"] .sidepanel, html[data-skin="mirror"] .sheet-cols > .col-main {
+  background: url(../img/skins/mirror-crack-tl.svg) left 0 top 0 / 30px no-repeat, url(../img/skins/mirror-chip-br.svg) right 0 bottom 0 / 22px no-repeat,
+    linear-gradient(115deg, rgba(255, 255, 255, .055), rgba(255, 255, 255, 0) 30%, rgba(255, 255, 255, .03) 31%, rgba(255, 255, 255, 0) 48%), var(--glass); }
+html[data-skin="mirror"] .hero-card { background: url(../img/skins/mirror-hand.svg) right 10px bottom 6px / 76px auto no-repeat,
+  url(../img/skins/mirror-crack-tl.svg) left 0 top 0 / 30px no-repeat, url(../img/skins/mirror-chip-br.svg) right 0 bottom 0 / 22px no-repeat,
+  linear-gradient(115deg, rgba(255, 255, 255, .055), rgba(255, 255, 255, 0) 30%, rgba(255, 255, 255, .03) 31%, rgba(255, 255, 255, 0) 48%), var(--glass); }
+html[data-skin="mirror"] section.card[style*="background:transparent"] { background: transparent !important; box-shadow: none; }
+/* titles slightly out of register, as if seen in a broken mirror */
+html[data-skin="mirror"] h1, html[data-skin="mirror"] .hero-id h1 { text-shadow: -1.5px 0 rgba(255, 111, 181, .55), 1.5px 0 rgba(111, 227, 255, .55); }
+html[data-skin="mirror"] .sc-head h3, html[data-skin="mirror"] .modal header h2 { text-shadow: -1px 0 rgba(255, 111, 181, .45), 1px 0 rgba(111, 227, 255, .45); }
+/* polished chrome buttons */
+html[data-skin="mirror"] .btn.primary, html[data-skin="mirror"] .boost-grid button.on {
+  background: linear-gradient(180deg, #ffffff 0%, #dfe6f1 40%, #9eaabf 52%, #cfd8e6 100%); border-color: #eef2f8; color: #0b0e16;
+  box-shadow: -2px 0 10px rgba(255, 111, 181, .22), 2px 0 10px rgba(111, 227, 255, .22), inset 0 1px 0 #ffffff; }
+html[data-skin="mirror"] .btn.primary:hover { background: linear-gradient(180deg, #ffffff 0%, #eef2f8 45%, #b8c3d4 55%, #e2e8f2 100%); }
+/* a thread of split light under the top bar */
+html[data-skin="mirror"] .topbar::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 2px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, #6fe3ff 18%, #a98bff 42%, #ff8fd8 62%, #ffd27a 80%, transparent); opacity: .8; }
+html[data-skin="mirror"] .page-title h1 { text-shadow: -1.5px 0 rgba(255, 111, 181, .55), 1.5px 0 rgba(111, 227, 255, .55), 0 0 8px var(--bg), 0 0 16px var(--bg); }
