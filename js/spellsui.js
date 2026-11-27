@@ -78,10 +78,12 @@ export function renderSpellsEditor(root, ctx) {
           ${list.map((s) => spellLine(s, {
             remove: s.granted ? null : { e: e.id, r, kind: 'rep', ref: s.ref },
             extra: (s.granted ? ` <span class="badge">${s.extra ? 'extra · ' : 'granted · '}${esc(s.source || '')}</span>` : '')
-              + (sigOn ? ` <label class="small muted" style="margin-left:6px"><input type="radio" name="sig-${esc(e.id)}-${r}" data-sig='${esc(JSON.stringify({ e: e.id, r }))}' value="${esc(s.ref)}" ${(store.sig || {})[r] === s.ref ? 'checked' : ''}> signature</label>` : ''),
+              + (sigOn ? ` <label class="small muted" style="margin-left:6px"><input type="radio" name="sig-${esc(e.id)}-${r}" data-sig='${esc(JSON.stringify({ e: e.id, r }))}' value="${esc(s.ref)}" ${(store.sig || {})[r] === s.ref ? 'checked' : ''}> signature</label>` : '')
+              // Signature Spell Expansion: up to two more, of 3rd rank or lower.
+              + (e.sigExtra && r > 0 && r <= 3 && (store.sig || {})[r] !== s.ref ? (() => { const x = store.sigX || []; const on = x.includes(s.ref); return ` <label class="small muted" style="margin-left:6px"><input type="checkbox" data-sigx='${esc(JSON.stringify({ e: e.id, ref: s.ref }))}' ${on ? 'checked' : ''} ${!on && x.length >= e.sigExtra ? 'disabled' : ''}> extra signature</label>`; })() : ''),
           })).join('') || `<p class="muted small" style="margin:2px 0 0">None chosen.</p>`}</div>`;
       }
-      if (e.signatureCount && !compact) html += `<p class="small muted">Signature spells (one per rank) can be cast at any rank you have slots for. ${Object.values(storeFor(build, e, false).sig || {}).filter(Boolean).length} of ${e.signatureCount} picked.</p>`;
+      if (e.signatureCount && !compact) html += `<p class="small muted">Signature spells (one per rank) can be cast at any rank you have slots for. ${Object.values(storeFor(build, e, false).sig || {}).filter(Boolean).length} of ${e.signatureCount} picked.${e.sigExtra ? ` Signature Spell Expansion: ${(storeFor(build, e, false).sigX || []).length} of ${e.sigExtra} extra (3rd rank or lower).` : ''}</p>`;
     } else if (e.book) {
       const b = e.book;
       html += `<div class="row between" style="margin-bottom:4px"><b>${esc(b.label)}</b><span class="small ${b.limit != null && (b.count < b.levelLimit || b.cantripCount < b.cantripLimit) ? 'warn' : 'muted'}">${b.limit != null ? `${b.cantripCount}/${b.cantripLimit} cantrips · ${b.count}/${b.levelLimit} spells` : `${b.cantripCount} cantrips · ${b.count} spells`}</span></div>`;
@@ -189,6 +191,14 @@ function wire(root, ctx) {
       bucket[o.r] = (bucket[o.r] || []).filter((x) => x !== o.ref);
       if (st.sig && st.sig[o.r] === o.ref) delete st.sig[o.r];
     }
+    ctx.update();
+  }));
+  $$('[data-sigx]', root).forEach((c) => (c.onchange = () => {
+    const o = JSON.parse(c.dataset.sigx);
+    const st = storeFor(build, entry(o.e));
+    const x = new Set(st.sigX || []);
+    if (c.checked) x.add(o.ref); else x.delete(o.ref);
+    st.sigX = [...x];
     ctx.update();
   }));
   $$('[data-sig]', root).forEach((r) => (r.onchange = () => {

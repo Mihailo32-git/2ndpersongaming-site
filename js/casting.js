@@ -145,10 +145,18 @@ export function buildSpellcasting(engine, ch, statMods) {
     const attr = cfg.attr || ch.keyAttr || 'cha';
     const slots = cfg.slots(L);
     const maxRank = Math.max(0, ...Object.keys(slots).map(Number).filter((r) => r <= 9));
+    // Mind Over Matter (psychic 20th): a second 10th-rank slot.
+    if (slots[10] && owned.has('mind-over-matter')) slots[10] += 1;
     const e = {
       id: 'class', label: cls.name, source: 'class', classSlug: cls.slug, trad, type: cfg.type, attr, ...stats(attr),
-      slots, maxRank, cantrips: cfg.cantrips, extraSlots: [], granted: [], warnings: [],
+      // Cantrip Expansion: two more cantrips (prepared each day, or in the repertoire).
+      slots, maxRank, cantrips: cfg.cantrips + (owned.has('cantrip-expansion') ? 2 : 0), extraSlots: [], bonusSlots: [], granted: [], warnings: [],
     };
+    // Conscious Spell Specialization (psychic 14th): one more slot of 1st–4th rank (5th at 18th) for spells your
+    // conscious mind grants.
+    if (cfg.psychic && owned.has('conscious-spell-specialization')) {
+      for (let r = 1; r <= (L >= 18 ? 5 : 4); r++) if (r <= maxRank) e.bonusSlots.push({ rank: r, key: 'c' + r, count: 1, label: 'Conscious Spell Specialization: only spells your conscious mind grants' });
+    }
     if (!trad) e.warnings.push(cfg.trad === 'bloodline' ? 'Choose a bloodline to set your tradition' : cfg.trad === 'patron' ? 'Choose a patron to set your tradition' : 'Choose an eidolon to set your tradition');
 
     // Spells granted by the subclass (bloodline/mystery granted spells, psychic conscious mind)
@@ -178,11 +186,19 @@ export function buildSpellcasting(engine, ch, statMods) {
         e.mind = mind.rec;
         for (const r of mind.rec.psychic.psiCantrips || []) { const x = ref(r); if (valid(x)) e.psiCantrips.push(x); }
         for (const [lvl, r] of Object.entries(mind.rec.psychic.unique || {})) if (Number(lvl) <= L) { const x = ref(r); if (valid(x)) e.psiCantrips.push({ ...x, unique: true, level: Number(lvl) }); }
+        // Parallel Breakthrough: a psi cantrip from another conscious mind.
+        for (const it of ch.items) {
+          if (it.rec.slug !== 'parallel-breakthrough' || !it.sel?.spell) continue;
+          const x = ref('@spells/' + it.sel.spell);
+          if (!valid(x) || e.psiCantrips.some((p) => p.ref === x.ref)) continue;
+          const from = db.list('classfeatures').find((m) => m.psychic && [...(m.psychic.psiCantrips || []), ...Object.values(m.psychic.unique || {})].includes(x.ref));
+          e.psiCantrips.push({ ...x, parallel: true, fromMind: from?.name, amp: from?.psychic?.amps?.[x.ref] });
+        }
       }
     }
 
     if (cfg.type === 'spontaneous') {
-      e.repLimits = { 0: cfg.cantrips };
+      e.repLimits = { 0: e.cantrips };
       for (const [r, n] of Object.entries(slots)) if (Number(r) <= 9) e.repLimits[r] = n;
       e.repertoire = {};
       const rep = sp.rep || {};
@@ -200,6 +216,9 @@ export function buildSpellcasting(engine, ch, statMods) {
       e.signatureCount = owned.has('signature-spells') ? Object.keys(e.repLimits).filter((r) => r > 0).length : 0;
       const sig = sp.sig || {};
       e.signature = (Array.isArray(sig) ? sig : Object.values(sig)).filter(Boolean).slice(0, e.signatureCount);
+      // Signature Spell Expansion (psychic 10th): two more signature spells of 3rd rank or lower.
+      e.sigExtra = e.signatureCount && owned.has('signature-spell-expansion-psychic') ? 2 : 0;
+      if (e.sigExtra) for (const r of (sp.sigX || []).slice(0, e.sigExtra)) if (r && !e.signature.includes(r)) e.signature.push(r);
     } else {
       // Prepared casters
       if (cfg.book) {
@@ -398,7 +417,15 @@ export function buildSpellcasting(engine, ch, statMods) {
   // ------------------------------------------------------------------ innate spells
   const innStats = () => { const o = stats('cha'); return { attack: o.attack, dc: o.dc, prof: o.rank }; };
   const innateRank = (rec, g, p) => (isCantrip(rec) ? out.cantripRank : (p && p.orLower ? rec.rank : (g.innateRank || rec.rank)));
-  const pushInnate = (x, it, g, p) => out.innate.push({ ...x, rank: innateRank(x.rec, g, p), source: it.rec.name, trad: g.innateTrad || (p && !Array.isArray(p.trad) ? p.trad : null), attr: 'cha', ...innStats() });
+  // Ancestral Mind (psychic): innate spells from ancestry feats and heritages can use the psychic attribute and
+  // become occult.
+  const psyAttr = owned.has('ancestral-mind') ? out.entries.find((e) => e.psiCantrips || e.mind)?.attr : null;
+  const ancestral = (it) => psyAttr && (it.pack === 'heritages' || it.pack === 'ancestryfeatures' || (it.pack === 'feats' && it.rec.cat === 'ancestry'));
+  const pushInnate = (x, it, g, p) => {
+    const anc = ancestral(it);
+    const st = anc ? (() => { const o = stats(psyAttr); return { attack: o.attack, dc: o.dc, prof: o.rank }; })() : innStats();
+    out.innate.push({ ...x, rank: innateRank(x.rec, g, p), source: it.rec.name + (anc ? ' · Ancestral Mind' : ''), trad: anc ? 'occult' : g.innateTrad || (p && !Array.isArray(p.trad) ? p.trad : null), attr: anc ? psyAttr : 'cha', ...st });
+  };
   for (const it of ch.items) {
     const g = it.rec.spellGrants;
     if (!g?.innate) continue;

@@ -54,7 +54,7 @@ if (!readOnly && charRec.id && store.conflictFor(charRec.id)) {
   if (pick === 'mine') await store.save(charRec, { force: true }).catch((e) => toast(e.message, 'error'));
 }
 const build = normalizeBuild(charRec.build);
-const state = Object.assign({ hp: null, temp: 0, hero: 1, focus: null, dying: 0, wounded: 0, conditions: [], effects: [], raging: false, shieldRaised: false,
+const state = Object.assign({ hp: null, temp: 0, hero: 1, focus: null, dying: 0, wounded: 0, conditions: [], effects: [], raging: false, unleashed: false, shieldRaised: false,
   used: {}, prep: {}, innateUsed: {}, dailyUsed: {}, notes: '', companions: {}, freqUsed: {}, situational: {}, favEffects: [], favActions: [], alchemy: {}, toggles: {}, staff: null }, charRec.state || {});
 // Maps saved by older versions of the server can come back as lists ({} became []): turn them back into maps.
 for (const k of ['used', 'prep', 'innateUsed', 'dailyUsed', 'companions', 'freqUsed', 'situational', 'alchemy', 'toggles']) state[k] = asObj(state[k]);
@@ -260,6 +260,7 @@ function render() {
   const heroBtns = `<div class="row no-print hero-btns">
         <button type="button" class="btn small" id="restBtn" title="Daily preparations: restore HP, slots and focus">☾ Rest</button>
         ${isBarb ? `<button type="button" class="btn small ${state.raging ? 'primary' : ''}" id="rageBtn" aria-pressed="${state.raging}">${state.raging ? 'Raging' : 'Rage'}</button>` : ''}
+        ${ch.ownedSlugs.has('unleash-psyche') ? `<button type="button" class="btn small ${state.unleashed ? 'primary' : ''}" id="unleashBtn" aria-pressed="${state.unleashed}" title="Unleash Psyche: 2 rounds; afterwards Stupefied 1 for 2 rounds">${state.unleashed ? 'Psyche unleashed' : 'Unleash Psyche'}</button>` : ''}
         ${ch.shield ? `<button type="button" class="btn small ${state.shieldRaised ? 'primary' : ''}" id="shieldBtn" aria-pressed="${state.shieldRaised}">${state.shieldRaised ? 'Shield raised' : 'Raise shield'}</button>` : ''}
       </div>`;
   main.innerHTML = `
@@ -404,10 +405,12 @@ const HEAL_DCS = [[15, 1, 0], [20, 2, 10], [30, 3, 30], [40, 4, 50]];
 // amps from feats that can be used instead (Warp Space, Mental Balm…).
 function psiExtras(ref) {
   const e = ch.spellcasting.entries.find((x) => x.mind && x.psiCantrips);
-  if (!e || !e.psiCantrips.some((p) => p.ref === ref)) return '';
-  const text = ((e.mind.psychic || {}).amps || {})[ref];
+  const p = e && e.psiCantrips.find((x) => x.ref === ref);
+  if (!p) return '';
+  // Parallel Breakthrough's cantrip keeps the amp of the mind it comes from.
+  const text = ((e.mind.psychic || {}).amps || {})[ref] || p.amp;
   const alts = ch.items.filter((i) => i.rec && i.rec.altAmp);
-  let html = `<h4 class="act-x-h">Psi cantrip <span class="muted small">${esc(e.mind.name)} · amp it by spending 1 Focus Point</span></h4>${text ? `<div class="rules-text psi-amp">${text}</div>` : ''}`;
+  let html = `<h4 class="act-x-h">Psi cantrip <span class="muted small">${esc(p.fromMind ? p.fromMind + ' (Parallel Breakthrough)' : e.mind.name)} · amp it by spending 1 Focus Point</span></h4>${text ? `<div class="rules-text psi-amp">${text}</div>` : ''}`;
   if (alts.length) html += `<h4 class="act-x-h">Other amps you know <span class="muted small">use one in place of the normal amp</span></h4>`
     + alts.map((i) => `<div class="rules-text psi-amp"><p><a class="ref" data-ref="${esc(refOf(i.rec).slice(1))}"><b>${esc(i.rec.name)}</b></a></p>${i.rec.altAmp}</div>`).join('');
   return html;
@@ -624,6 +627,7 @@ TAB_RENDER.spells = (el) => {
       const used = state.used[e.id] || {};
       html += `<section class="card" style="background:transparent"><div class="sc-head"><h3>${esc(e.label)}</h3><div class="sc-stats"><span class="sc-stat">${esc(titleCase(e.trad || '—'))} ${esc(e.type)}</span><span class="sc-stat">Attack<b>${signed(e.attack)}</b></span><span class="sc-stat">DC<b>${e.dc}</b></span>${e.psiCantrips?.length ? `<span class="sc-stat">Focus points<b>${state.focus}/${sc.focus.max || ch.focusMax}</b></span>` : ''}</div></div>`;
       if (e.note) html += `<p class="small muted">${esc(e.note)}</p>`;
+      if (e.psiCantrips && state.unleashed) html += `<p class="notice small"><b>Psyche unleashed.</b> Damaging spells you cast with your psychic spellcasting get a status bonus to their initial damage of double the spell’s rank (your cantrips: <b>+${2 * sc.cantripRank}</b>). Each creature takes it only once per spell.</p>`;
       if (e.type === 'prepared') {
         const prep = state.prep[e.id] || {};
         const rows = slotRows(e);
@@ -649,16 +653,17 @@ TAB_RENDER.spells = (el) => {
         if (e.granted?.length) html += `<div class="rank-block"><div class="rank-head"><span class="rk">Granted</span></div>${e.granted.map((g) => spellRow(g, { extra: ` <span class="badge">${g.rank ? ordinal(g.rank) : 'cantrip'} · ${esc(g.source)}</span>` })).join('')}</div>`;
       } else {
         const ranks = new Set([0, ...Object.keys(e.slots).map(Number), ...Object.keys(e.repertoire || {}).map(Number)]);
-        if (e.psiCantrips?.length) html += `<div class="rank-block"><div class="rank-head"><span class="rk">Psi</span><span class="small muted">spend 1 Focus Point to amp · tap a cantrip to read its amp</span></div>${e.psiCantrips.map((p) => spellRow(p, { extra: p.unique ? ' <span class="badge accent">unique</span>' : '' })).join('')}</div>`;
+        if (e.psiCantrips?.length) html += `<div class="rank-block"><div class="rank-head"><span class="rk">Psi</span><span class="small muted">spend 1 Focus Point to amp · tap a cantrip to read its amp</span></div>${e.psiCantrips.map((p) => spellRow(p, { extra: p.unique ? ' <span class="badge accent">unique</span>' : p.parallel ? ' <span class="badge">parallel</span>' : '' })).join('')}</div>`;
         for (const rank of [...ranks].sort((a, b) => a - b)) {
           const n = e.slots[rank] || 0;
           const list = (e.repertoire || {})[rank] || [];
           if (!n && !list.length && rank !== 0) continue;
           const u = used[rank] || 0;
           html += `<div class="rank-block"><div class="rank-head"><span class="rk">${rank === 0 ? 'Cantrips' : ordinal(rank)}</span>
-            ${rank === 0 ? `<span class="small muted">heightened to ${sc.cantripRank}</span>` : `<span class="slot-pips" aria-label="${n - u} of ${n} slots left">${Array.from({ length: n }, (_, i) => `<button type="button" class="${i < u ? 'used' : ''}" data-slot='${esc(JSON.stringify({ e: e.id, r: rank, i }))}' aria-label="Slot ${i + 1}${i < u ? ' (used)' : ''}" ${readOnly ? 'disabled' : ''}></button>`).join('')}</span><span class="small muted">${n - u}/${n}</span>`}</div>
+            ${rank === 0 ? `<span class="small muted">heightened to ${sc.cantripRank}</span>` : `<span class="slot-pips" aria-label="${n - u} of ${n} slots left">${Array.from({ length: n }, (_, i) => `<button type="button" class="${i < u ? 'used' : ''}" data-slot='${esc(JSON.stringify({ e: e.id, r: rank, i }))}' aria-label="Slot ${i + 1}${i < u ? ' (used)' : ''}" ${readOnly ? 'disabled' : ''}></button>`).join('')}</span><span class="small muted">${n - u}/${n}</span>${(e.bonusSlots || []).filter((x) => x.rank === rank).map((x) => { const bu = used[x.key] || 0; return `<span class="slot-pips bonus-pips" title="${esc(x.label)}">${Array.from({ length: x.count }, (_, i) => `<button type="button" class="${i < bu ? 'used' : ''}" data-slot='${esc(JSON.stringify({ e: e.id, r: x.key, i }))}' aria-label="${esc(x.label)}${i < bu ? ' (used)' : ''}" ${readOnly ? 'disabled' : ''}></button>`).join('')}</span><span class="small muted" title="${esc(x.label)}">+1 mind</span>`; }).join('')}`}</div>
             ${list.map((s) => spellRow(s, { extra: (s.granted ? ' <span class="badge">granted</span>' : '') + ((e.signature || []).includes(s.ref) ? ' <span class="badge accent">signature</span>' : '') })).join('') || (rank > 0 ? '<p class="small muted" style="padding-left:74px;margin:2px 0">No spells of this rank in your repertoire — signature spells and heightening still use these slots.</p>' : '<p class="small muted" style="padding-left:74px;margin:2px 0">None.</p>')}</div>`;
         }
+        if (e.bonusSlots?.length) html += `<p class="small muted">The pips marked “+1 mind” are Conscious Spell Specialization’s slots: use them only for spells your conscious mind grants.</p>`;
         const sigs = (e.signature || []).map((r) => db.get(r)).filter(Boolean);
         if (sigs.length) html += `<p class="small muted">Signature spells: ${sigs.map((s) => esc(s.name)).join(', ')} — cast them with any slot of their rank or higher.</p>`;
       }
@@ -1353,12 +1358,27 @@ function wire() {
     if (state.raging) { const t = ch.level + ch.attrs.con; state.temp = Math.max(state.temp, t); toast(`Raging: +${t} temporary HP`); }
     change();
   };
+  // Unleash Psyche: on for 2 rounds; when it subsides, Stupefied 1 for 2 rounds and no unleashing for 2 rounds.
+  const unl = $('#unleashBtn');
+  if (unl) unl.onclick = () => {
+    if (!state.unleashed) {
+      if (state.conditions.some((c) => c.slug === 'stupefied')) { toast("You can't Unleash your Psyche while Stupefied"); return; }
+      state.unleashed = true;
+      toast('Psyche unleashed for 2 rounds: +2 × rank status damage on your damaging psychic spells');
+    } else {
+      state.unleashed = false;
+      const st = state.conditions.find((c) => c.slug === 'stupefied');
+      if (st) st.value = Math.max(st.value, 1); else state.conditions.push({ slug: 'stupefied', value: 1 });
+      toast("Psyche subsided: Stupefied 1 for 2 rounds, and you can't Unleash again for 2 rounds");
+    }
+    change();
+  };
   const sh = $('#shieldBtn');
   if (sh) sh.onclick = () => { state.shieldRaised = !state.shieldRaised; change(); };
   const pBtn = $('#portraitBtn');
   if (pBtn) pBtn.onclick = () => (portraitSrc(build.portrait) ? portraitModal() : choosePortrait());
   $('#restBtn').onclick = () => {
-    state.hp = ch.hp.max; state.temp = 0; state.focus = ch.spellcasting.focus.max || ch.focusMax; state.used = {}; state.innateUsed = {}; state.dailyUsed = {}; state.raging = false; state.shieldRaised = false;
+    state.hp = ch.hp.max; state.temp = 0; state.focus = ch.spellcasting.focus.max || ch.focusMax; state.used = {}; state.innateUsed = {}; state.dailyUsed = {}; state.raging = false; state.unleashed = false; state.shieldRaised = false;
     // Daily preparations: the staff in hand (or the one carried) is prepared with fresh charges.
     prepareStaff(wieldedStaves()[0] || carriedStaves()[0]);
     // Limited uses come back too, except weekly (and longer) ones.

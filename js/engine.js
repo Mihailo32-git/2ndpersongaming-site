@@ -873,6 +873,7 @@ export class Engine {
     ch.stateOptions = [];
     for (const c of state.conditions || []) ch.stateOptions.push('self:condition:' + c.slug);
     if (state.raging) ch.stateOptions.push('self:effect:rage');
+    if (state.unleashed) ch.stateOptions.push('self:effect:unleash-psyche');
     // Strike switches the player flips (Expanded Splash, Sticky Bomb, Bomber field vials: cold/electricity/fire).
     ch.toggles = [];
     for (const { r, inst } of ch.rules) {
@@ -1019,6 +1020,16 @@ export class Engine {
         const v = typeof r.value === 'number' ? r.value : this._value(ch, inst, r.value);
         if (r.selector && v) ch.speed.other.push({ type: String(r.selector).replace(/-speed$/, ''), value: v });
       }
+      // Other Speeds: keep the best of each type, then add their own modifiers (Constant Levitation: +10 status
+      // to the fly Speed while the psyche is unleashed) and the armor penalty, which reduces all Speeds.
+      const best = new Map();
+      for (const o of ch.speed.other) if (!best.has(o.type) || best.get(o.type).value < o.value) best.set(o.type, o);
+      ch.speed.other = [...best.values()].map((o) => {
+        const m = this._mods(ch, [o.type + '-speed', 'all-speeds'], state).mods;
+        if (pen) m.push({ label: 'Armor', value: pen, type: 'untyped' });
+        const st = stackMods(m);
+        return st.total ? { ...o, base: o.value, value: Math.max(5, o.value + st.total), mods: st.used } : o;
+      });
     }
     // Senses
     const senses = [];
@@ -1067,7 +1078,10 @@ export class Engine {
           types = types.map((t) => (t === 'custom' ? label : t)).filter(Boolean);
         }
         return types.length ? { kind: x.r.key, type: types.join(', '), value: x.r.value != null ? this._value(ch, x.inst, x.r.value) : null, source: x.inst.rec.name } : null;
-      }).filter(Boolean);
+      }).filter(Boolean)
+      // The same resistance (or weakness) twice doesn't stack: only the highest counts (Mental Buffer: half your
+      // level, or your level while your psyche is unleashed).
+      .filter((d, i, all) => !all.some((o, j) => j !== i && o.kind === d.kind && o.type === d.type && ((Number(o.value) || 0) > (Number(d.value) || 0) || ((Number(o.value) || 0) === (Number(d.value) || 0) && j < i))));
     // Languages
     const langs = new Set([...(ch.ancestry?.languages || []), ...ch.grantedLanguages]);
     ch.languageSlots = (ch.ancestry?.addLanguageCount || 0) + Math.max(0, A.int);

@@ -334,6 +334,8 @@ function slotsLeft(p) {
     } else {
       const used = p.state.used[e.id] || {};
       for (const [r, n] of Object.entries(e.slots || {})) if (Number(r) > 0) ranks[r] = [Math.max(0, n - (used[r] || 0)), n];
+      // Conscious Spell Specialization's extra slots (conscious-mind spells only) count with their rank.
+      for (const b of e.bonusSlots || []) { const x = (ranks[b.rank] = ranks[b.rank] || [0, 0]); x[0] += Math.max(0, b.count - (used[b.key] || 0)); x[1] += b.count; }
     }
     if (Object.keys(ranks).length) out.push({ label: e.label, ranks });
   }

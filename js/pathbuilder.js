@@ -156,7 +156,13 @@ export function convertPathbuilder(data, db, engine) {
     const [name, extra, type, level, loc, kind] = f;
     if (type === 'Heritage') continue;
     if (kind === 'childChoice') { children.push(f); continue; }
-    const rec = find('feats', name);
+    let rec = find('feats', name);
+    // Class feats that share a name with another class's feat: "Signature Spell Expansion" for a psychic is
+    // "Signature Spell Expansion (Psychic)" here (the plain one is the sorcerer's).
+    if (type === 'Class Feat' && pb.class && rec && !(rec.traits || []).includes(sluggify(pb.class))) {
+      const alt = find('feats', `${name} (${pb.class})`);
+      if (alt && alt !== rec && (alt.traits || []).includes(sluggify(pb.class))) rec = alt;
+    }
     if (type === 'Awarded Feat') {
       // Given by a background or feature: already part of the character if the source is.
       // Checked after the choices are made (a cleric's doctrine gives Shield Block only once it's picked).
