@@ -394,7 +394,7 @@ html[data-skin="mirror"] .topbar::after { content: ''; position: absolute; left:
 html[data-skin="mirror"] .page-title h1 { text-shadow: -1.5px 0 rgba(255, 111, 181, .55), 1.5px 0 rgba(111, 227, 255, .55), 0 0 8px var(--bg), 0 0 16px var(--bg); }
 
 /* ------------------------------------------------------------ Clockwork: an order of brass and cogs that holds the power of Fate —
-   a Wheel of Fate with an eye, a gear-driven bobbin of gold thread, a star map, an hourglass */
+   a dial of light, warm beams, a violet night glow and a star map (no corner pictures), an hourglass */
 html[data-skin="clockwork"] {
   color-scheme: dark; --ov: 255, 238, 205;
   --bg: #110d09; --header: #17110b; --panel: #1c150e; --panel2: #251c13; --panel3: #31251a;
@@ -410,16 +410,31 @@ html[data-skin="clockwork"] {
   --frame: rgba(224, 173, 76, .5); --frame-gap: rgba(8, 6, 3, .62); --frame-inner: rgba(246, 214, 136, .14);
   --input-bg: rgba(8, 6, 3, .6); --topbar: rgba(20, 15, 10, .93); --hp-fill: linear-gradient(90deg, #b07a2c, #ffd36a, #fff1c8); --brand-hue: 200deg;
   --mark: url(../img/skins/clock-eye.svg);
+  /* No pictures: the background is light. A faint brass dial glows bottom right (rings here, its ticks on body::after),
+     warm beams fall from the top corner, a violet night glow sits low on the left, and the star map runs behind it all. */
   --backdrop:
-    radial-gradient(1200px 900px at 50% 40%, transparent 42%, rgba(0, 0, 0, .6) 100%),
-    radial-gradient(900px 620px at 100% 0%, rgba(240, 180, 80, .14), transparent 62%),
+    radial-gradient(1200px 900px at 50% 40%, transparent 42%, rgba(0, 0, 0, .58) 100%),
+    radial-gradient(circle at calc(100% - 210px) calc(100% - 210px), rgba(255, 224, 150, .24) 0, rgba(255, 208, 120, .08) 46px, transparent 92px),
+    radial-gradient(circle at calc(100% - 210px) calc(100% - 210px), transparent 0 128px, rgba(240, 196, 103, .26) 128px 129.5px, transparent 130.5px 186px,
+      rgba(240, 196, 103, .34) 186px 188px, transparent 189px 212px, rgba(240, 196, 103, .15) 212px 213px, transparent 214px),
+    radial-gradient(circle at calc(100% - 210px) calc(100% - 210px), rgba(255, 200, 110, .07) 0, transparent 260px),
+    conic-gradient(from 0deg at 100% 0%, transparent 0 202deg, rgba(255, 214, 140, .042) 203.4deg 204.4deg, transparent 206deg 212deg,
+      rgba(255, 214, 140, .032) 214deg 216deg, transparent 218.5deg 225.5deg, rgba(255, 214, 140, .036) 226.8deg 227.6deg, transparent 229deg 236deg,
+      rgba(255, 214, 140, .026) 238deg 240.5deg, transparent 243deg),
+    radial-gradient(900px 620px at 100% 0%, rgba(240, 180, 80, .17), transparent 62%),
     radial-gradient(1100px 700px at 50% -10%, rgba(70, 52, 120, .22), transparent 70%),
-    radial-gradient(700px 520px at 0% 100%, rgba(200, 110, 60, .1), transparent 65%),
+    radial-gradient(780px 560px at 0% 100%, rgba(112, 80, 196, .17), transparent 65%),
+    radial-gradient(520px 380px at 20% 100%, rgba(200, 110, 60, .09), transparent 70%),
     url(../img/skins/clock-stars.svg) 0 0 / 360px 360px,
     linear-gradient(170deg, #15111a, #110d0a 45%, #0e0a07 70%, #140e09);
-  --corner-art: url(../img/skins/clock-orrery.svg) right -24px top 50px / 340px auto no-repeat, url(../img/skins/clock-loom.svg) left -12px bottom -10px / 228px auto no-repeat;
+  --corner-art:
+    repeating-conic-gradient(from -1deg at calc(100% - 210px) calc(100% - 210px), rgba(255, 231, 168, .6) 0deg 1.8deg, transparent 2.2deg 30deg),
+    repeating-conic-gradient(from 0deg at calc(100% - 210px) calc(100% - 210px), rgba(246, 214, 136, .34) 0deg .5deg, transparent .85deg 6deg);
 }
-html[data-skin="clockwork"] body::after { opacity: .6; }
+/* the dial's ticks: only a ring of them shows */
+html[data-skin="clockwork"] body::after { opacity: 1;
+  -webkit-mask: radial-gradient(circle at calc(100% - 210px) calc(100% - 210px), transparent 0 168px, #000 169px 184px, transparent 185px);
+  mask: radial-gradient(circle at calc(100% - 210px) calc(100% - 210px), transparent 0 168px, #000 169px 184px, transparent 185px); }
 /* cards are brushed metal plates, a riveted brass bracket on two corners */
 html[data-skin="clockwork"] .card, html[data-skin="clockwork"] .hero-card, html[data-skin="clockwork"] .sidepanel, html[data-skin="clockwork"] .sheet-cols > .col-main {
   box-shadow: inset 0 0 0 3px var(--frame-gap), inset 0 0 0 4px var(--frame-inner), inset 0 1px 0 rgba(255, 230, 170, .08), var(--shadow); }
