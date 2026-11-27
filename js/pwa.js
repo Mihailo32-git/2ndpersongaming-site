@@ -1,7 +1,7 @@
 // Installable app + offline: registers the service worker, shows "new version" and install prompts,
 // and the "App & offline" panel (download all rules text for use without internet).
 import { modal, toast, esc } from './ui.js';
-import { SKINS, currentSkin, setSkin } from './theme.js';
+import { SKINS, currentSkin, setSkin, themesUnlocked, setThemesUnlocked } from './theme.js';
 
 const sw = 'serviceWorker' in navigator ? navigator.serviceWorker : null;
 let reg = null;
@@ -94,6 +94,18 @@ const mb = (bytes) => { const v = (bytes || 0) / 3.5e6; return v < 10 ? v.toFixe
 
 export async function openAppPanel() {
   const m = modal('App & offline', {});
+  // Secret: five quick taps on the window title show or hide the theme picker on this device.
+  const title = m.el.querySelector('h2');
+  title.style.touchAction = 'manipulation'; title.style.userSelect = 'none'; title.style.webkitUserSelect = 'none';
+  let taps = [];
+  title.addEventListener('click', () => {
+    const now = Date.now(); taps = taps.filter((t) => now - t < 2500); taps.push(now);
+    if (taps.length < 5) return;
+    taps = [];
+    const on = !themesUnlocked(); setThemesUnlocked(on);
+    toast(on ? 'Themes unlocked on this device.' : 'Themes hidden on this device.', 'ok');
+    draw();
+  });
   const draw = async () => {
     const st = await ask('status');
     const ready = !!st;
@@ -116,8 +128,8 @@ export async function openAppPanel() {
         ${allCr ? '<span class="badge ok-badge">Saved</span>' : `<button type="button" class="btn" data-dl="creatures" ${navigator.onLine ? '' : 'disabled'}>Download (~${mb(st.sizes?.creatures)} MB)</button>`}</div>` : ''}
       <div class="app-row"><div><b>Updates</b><p class="muted small" id="updMsg">Version ${esc(st?.version || '–')}. New versions are picked up by themselves; check here if one hasn’t shown up.</p></div>
         <button type="button" class="btn" id="updCheck" ${navigator.onLine ? '' : 'disabled'}>Check for updates</button></div>
-      <div class="app-row"><div><b>Theme</b><p class="muted small">How the site looks on this device.</p>
-        <div class="theme-pick" role="radiogroup" aria-label="Theme">${SKINS.map((k) => `<button type="button" class="btn small ${currentSkin().id === k.id ? 'primary' : ''}" role="radio" aria-checked="${currentSkin().id === k.id}" data-skin-pick="${esc(k.id)}" title="${esc(k.note)}">${esc(k.name)}</button>`).join('')}</div></div></div>`;
+      ${themesUnlocked() ? `<div class="app-row"><div><b>Theme</b><p class="muted small">How the site looks on this device.</p>
+        <div class="theme-pick" role="radiogroup" aria-label="Theme">${SKINS.map((k) => `<button type="button" class="btn small ${currentSkin().id === k.id ? 'primary' : ''}" role="radio" aria-checked="${currentSkin().id === k.id}" data-skin-pick="${esc(k.id)}" title="${esc(k.note)}">${esc(k.name)}</button>`).join('')}</div></div></div>` : ''}`;
     const upd = m.body.querySelector('#updCheck');
     const updMsg = m.body.querySelector('#updMsg');
     upd.onclick = async () => {

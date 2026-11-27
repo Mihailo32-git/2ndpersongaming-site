@@ -1,7 +1,7 @@
 // Light / dark mode, and the fantasy themes ("skins"). Both choices are kept on this device; with no light/dark
 // choice saved, the device's own setting decides. Each page sets data-theme and data-skin in <head> before it
 // paints (no flash); this adds the light/dark toggle to the top bar. A skin decides light or dark by itself, so
-// the toggle is hidden while one is on. Themes are picked in the "App & offline" panel (setSkin).
+// the toggle is hidden while one is on. Themes are picked in the "App & offline" panel (setSkin), once unlocked there.
 const KEY = 'pf2e.theme';
 const SKIN_KEY = 'pf2e.skin';
 export const SKINS = [
@@ -16,6 +16,10 @@ export const SKINS = [
   { id: 'mirror', name: 'Mirrorshard', mode: 'dark', color: '#0f1219', note: 'Shattered mirrors, glass and fractured reality' },
 ];
 const saved = () => { try { return localStorage.getItem(KEY); } catch (e) { return null; } };
+// The theme picker is hidden until it's unlocked on a device (a secret: tap the "App & offline" title 5 times).
+const UNLOCK_KEY = 'pf2e.themesOn';
+export const themesUnlocked = () => { try { return localStorage.getItem(UNLOCK_KEY) === '1'; } catch (e) { return false; } };
+export function setThemesUnlocked(on) { try { if (on) localStorage.setItem(UNLOCK_KEY, '1'); else localStorage.removeItem(UNLOCK_KEY); } catch (e) { /* ignore */ } }
 const savedSkin = () => { try { return localStorage.getItem(SKIN_KEY) || ''; } catch (e) { return ''; } };
 const system = () => (window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
 export const currentSkin = () => SKINS.find((s) => s.id && s.id === (document.documentElement.dataset.skin || savedSkin())) || SKINS[0];
