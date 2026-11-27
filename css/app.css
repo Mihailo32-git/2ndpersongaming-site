@@ -1490,3 +1490,4 @@ html[data-theme="light"] .badge.rune-badge { color: #6d28d9; background: rgba(12
 .spell-seg { margin: 0 0 12px; flex-wrap: wrap; }
 .degree-notes { margin-top: 12px; padding: 8px 10px; border-radius: 10px; background: rgba(var(--ov), .04); }
 .degree-notes p { margin: 2px 0; }
+.theme-pick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }

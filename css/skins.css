@@ -1,0 +1,154 @@
+/* Fantasy skins (preview). Same layout as the default theme: only colours, fonts, frames and backgrounds change.
+   html[data-skin=tome|grove|cosmos]; tome also sets data-theme=light, the others data-theme=dark.
+   Fonts are self-hosted (fonts/, SIL Open Font License). Numbers keep the default fonts so they stay easy to read. */
+@font-face { font-family: 'Cinzel'; font-style: normal; font-display: swap; font-weight: 400 900; src: url(../fonts/cinzel-latin-wght-normal.woff2) format('woff2'); }
+@font-face { font-family: 'EB Garamond'; font-style: normal; font-display: swap; font-weight: 400 800; src: url(../fonts/eb-garamond-latin-wght-normal.woff2) format('woff2'); }
+@font-face { font-family: 'EB Garamond'; font-style: italic; font-display: swap; font-weight: 400 800; src: url(../fonts/eb-garamond-latin-wght-italic.woff2) format('woff2'); }
+
+/* ------------------------------------------------------------ shared: type and frames */
+html[data-skin] { --display: 'Cinzel', 'Trajan Pro', Georgia, serif; --book: 'EB Garamond', Garamond, Georgia, serif; }
+html[data-skin] h1, html[data-skin] h2, html[data-skin] h3, html[data-skin] .brand, html[data-skin] .sc-head h3,
+html[data-skin] .hero-id h1, html[data-skin] .page-title h1, html[data-skin] .sub-head, html[data-skin] .modal header h2 { font-family: var(--display); font-weight: 700; letter-spacing: .04em; color: var(--heading); }
+html[data-skin] .hero-id h1 { font-size: 25px; }
+html[data-skin] .label, html[data-skin] h2.label, html[data-skin] h3.label, html[data-skin] .sp-head .sp-col,
+html[data-skin] .ss .k, html[data-skin] .pill-label { font-family: var(--display); letter-spacing: .08em; }
+/* narrow labels: same face, tighter, so nothing gets cut off */
+html[data-skin] .tile-head, html[data-skin] .rank-head .rk { font-family: var(--display); letter-spacing: 0; font-size: 10.5px; }
+html[data-skin] .tile-head .label { font-size: 10px; letter-spacing: 0; }
+html[data-skin] .tabs button { font-family: var(--display); font-weight: 600; letter-spacing: .05em; }
+html[data-skin] .nav a { font-family: var(--display); letter-spacing: .05em; font-weight: 600; }
+/* names of spells, feats, actions and items, skills and rules text: a book face */
+html[data-skin] .name, html[data-skin] .sk-name, html[data-skin] .identity { font-family: var(--book); font-size: 16.5px; font-weight: 600; letter-spacing: .01em; }
+html[data-skin] .rules-text { font-family: var(--book); font-size: 16px; line-height: 1.5; }
+html[data-skin] .spell-line .sub, html[data-skin] .identity { font-family: var(--book); font-size: 14.5px; }
+/* framed cards: a thin inner rule inside the border, like a printed page */
+html[data-skin] .card, html[data-skin] .hero-card, html[data-skin] .sidepanel, html[data-skin] .sheet-cols > .col-main {
+  border-color: var(--frame); box-shadow: inset 0 0 0 3px var(--frame-gap), inset 0 0 0 4px var(--frame-inner), var(--shadow); }
+html[data-skin] .sc-head { border-bottom: 1px solid var(--frame-inner); padding-bottom: 8px; }
+/* ornamental rule under section headings */
+html[data-skin] .sc-head h3::before, html[data-skin] .sub-head::before { content: '❧ '; color: var(--accent); font-family: var(--book); font-weight: 400; }
+html[data-skin] .rank-block { border-top-color: var(--frame-inner); }
+html[data-skin] .tile .tile-value, html[data-skin] .pill-value { text-shadow: none; }
+html[data-skin] .brand svg { filter: hue-rotate(var(--brand-hue)) saturate(.8); }
+
+/* accent-coloured details that the default theme draws in blue */
+html[data-skin] .btn.primary, html[data-skin] .boost-grid button.on { background: linear-gradient(180deg, var(--acc-hi), var(--acc-lo)); border-color: var(--acc-edge);
+  color: var(--accent-ink); box-shadow: 0 3px 12px rgba(var(--acc-rgb), .28), inset 0 1px 0 rgba(255, 255, 255, .22); }
+html[data-skin] .btn.primary:hover { background: linear-gradient(180deg, var(--acc-hi), var(--acc-hi)); }
+html[data-skin] .btn.outline { background: rgba(var(--acc-rgb), .06); }
+html[data-skin] .list .item.selected, html[data-skin] .list .item[aria-selected=true], html[data-skin] .dr-item.selected,
+html[data-skin] .multi-grid label.on, html[data-skin] .sk-row.on { background: rgba(var(--acc-rgb), .13); border-color: rgba(var(--acc-rgb), .45); }
+html[data-skin] .chip.eff { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
+html[data-skin] .ss.attr .v, html[data-skin] .cond-row.eff .cond-name, html[data-skin] .lvl-badge { color: var(--accent); }
+html[data-skin] .gain-chip.feature, html[data-skin] .badge.mode, html[data-skin] .where-tag.w-worn { background: rgba(var(--acc-rgb), .1); border-color: rgba(var(--acc-rgb), .3); color: var(--accent); }
+html[data-skin] .lv-chip[aria-current] { background: rgba(var(--acc-rgb), .14); box-shadow: 0 0 0 3px rgba(var(--acc-rgb), .15); }
+html[data-skin] .cond-row.eff { background: rgba(var(--acc-rgb), .07); border-color: rgba(var(--acc-rgb), .25); }
+html[data-skin] .hero-card .tile.ac { background: linear-gradient(180deg, rgba(var(--acc-rgb), .12), rgba(var(--acc-rgb), .03)); }
+html[data-skin] .inv-eq .inv-item { background: linear-gradient(180deg, rgba(var(--acc-rgb), .07), rgba(var(--acc-rgb), .02)); border-color: rgba(var(--acc-rgb), .2); }
+html[data-skin] .gm-cr.pc, html[data-skin] .init-row.pc { background: rgba(var(--acc-rgb), .06); }
+html[data-skin] .lvl-bar { background: linear-gradient(90deg, rgba(var(--acc-rgb), .14), rgba(var(--acc-rgb), .03) 70%); border-color: rgba(var(--acc-rgb), .22); }
+html[data-skin] .hpbar > div:first-child:not(.low):not(.crit) { background: var(--hp-fill); }
+html[data-skin] input[type=text], html[data-skin] input[type=number], html[data-skin] input[type=email], html[data-skin] input[type=password],
+html[data-skin] input[type=search], html[data-skin] select, html[data-skin] textarea { background: var(--input-bg); border-color: var(--glass-line2); color: var(--ink); }
+html[data-skin] { background: var(--bg); }
+/* the page itself is see-through so the backdrop and corner art (body::before/::after) show behind the cards */
+html[data-skin] body { background: transparent; }
+html[data-skin] body::before { background: var(--backdrop); }
+html[data-skin] .topbar { background: var(--topbar); border-bottom: 1px solid var(--frame); box-shadow: 0 1px 0 var(--frame-gap), 0 2px 0 var(--frame-inner); }
+
+/* Corner art: a fixed layer above the backdrop and below the page (body::after, like body::before). */
+html[data-skin] body::after { content: ''; position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: -1; pointer-events: none; background: var(--corner-art, none); }
+
+/* ------------------------------------------------------------ Tome: an old manuscript page, notes in the margins */
+html[data-skin="tome"] {
+  color-scheme: light; --ov: 60, 35, 10;
+  --bg: #e7d8b8; --header: #f4ead2; --panel: #f6eedb; --panel2: #efe3c7; --panel3: #e4d3ae;
+  --line: #d3bd92; --line2: #c0a577; --line3: #e0cfaa;
+  --ink: #2a1b0e; --ink2: #46311d; --muted: #6c573c; --faint: #998263; --heading: #3b1f10;
+  --accent: #8e2420; --accent-ink: #fff4e2; --accent-soft: #f0d8ca; --accent-line: #cc9a86; --link: #8e2420;
+  --acc-rgb: 142, 36, 32; --acc-hi: #ad3a2f; --acc-lo: #7c1b16; --acc-edge: #6d1612;
+  --ok: #3b7434; --ok-soft: #e1ebd0; --hero: #9c6a17; --warn: #946010; --warn-soft: #f3e2bd; --bad: #a3271f; --bad-ink: #8c2019; --bad-soft: #f5dcd2; --bad-line: #dfa596;
+  --r0: #a2927a; --r1: #2f5878; --r2: #3c6d36; --r3: #94650f; --r4: #683582;
+  --glass: rgba(249, 242, 226, .9); --glass-2: rgba(241, 230, 205, .9); --glass-3: rgba(229, 214, 182, .96); --glass-strong: rgba(250, 244, 230, .98);
+  --glass-line: rgba(95, 62, 20, .17); --glass-line2: rgba(95, 62, 20, .3); --glass-hi: inset 0 1px 0 rgba(255, 255, 255, .55);
+  --shadow: 0 4px 14px rgba(80, 50, 12, .13);
+  --frame: #c7ac7c; --frame-gap: #f8f1df; --frame-inner: rgba(150, 110, 50, .28);
+  --input-bg: #fffaf0; --topbar: rgba(246, 236, 212, .95); --hp-fill: linear-gradient(90deg, #4c7d3c, #6b9a48); --brand-hue: 170deg;
+  --backdrop:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .35 0 0 0 0 .22 0 0 0 0 .06 0 0 0 .11 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
+    radial-gradient(1200px 800px at 50% 30%, transparent 55%, rgba(120, 80, 30, .24) 100%),
+    radial-gradient(900px 600px at 10% 0%, rgba(255, 245, 220, .6), transparent 60%),
+    #e7d8b8;
+  --corner-art: url(../img/skins/tome-notes-tl.svg) left 8px top 70px / 380px auto no-repeat, url(../img/skins/tome-notes-br.svg) right 8px bottom 6px / 380px auto no-repeat;
+}
+html[data-skin="tome"] body::after { opacity: .16; }
+html[data-skin="tome"] .lvl-bar { background: linear-gradient(90deg, rgba(var(--acc-rgb), .12), rgba(var(--acc-rgb), .03) 70%), var(--glass); }
+/* filigree in every card's corners, and a margin note in the sheet header's corner */
+html[data-skin="tome"] .card, html[data-skin="tome"] .hero-card, html[data-skin="tome"] .sidepanel, html[data-skin="tome"] .sheet-cols > .col-main {
+  background: url(../img/skins/tome-corner-tl.svg) left 4px top 4px / 18px no-repeat, url(../img/skins/tome-corner-tr.svg) right 4px top 4px / 18px no-repeat,
+    url(../img/skins/tome-corner-bl.svg) left 4px bottom 4px / 18px no-repeat, url(../img/skins/tome-corner-br.svg) right 4px bottom 4px / 18px no-repeat, var(--glass); }
+html[data-skin="tome"] .hero-card { background: url(../img/skins/tome-notes-card.svg) left 47% bottom 8px / 190px auto no-repeat,
+  url(../img/skins/tome-corner-tl.svg) left 4px top 4px / 18px no-repeat, url(../img/skins/tome-corner-tr.svg) right 4px top 4px / 18px no-repeat,
+  url(../img/skins/tome-corner-bl.svg) left 4px bottom 4px / 18px no-repeat, url(../img/skins/tome-corner-br.svg) right 4px bottom 4px / 18px no-repeat, var(--glass); }
+html[data-skin="tome"] .card.staff-card, html[data-skin="tome"] section.card[style*="background:transparent"] { background: url(../img/skins/tome-corner-tl.svg) left 5px top 5px / 22px no-repeat, url(../img/skins/tome-corner-br.svg) right 5px bottom 5px / 22px no-repeat, transparent !important; }
+
+/* ------------------------------------------------------------ Grove: worked wood, vines and leaves */
+html[data-skin="grove"] {
+  color-scheme: dark; --ov: 255, 240, 210;
+  --bg: #1b120b; --header: #20160e; --panel: #241910; --panel2: #2d2015; --panel3: #3a2a1c;
+  --line: #3b2b1c; --line2: #4d3925; --line3: #2c2016;
+  --ink: #f2eadb; --ink2: #dccdb2; --muted: #b3a283; --faint: #7f6f56; --heading: #d8e6b0;
+  --accent: #93c45f; --accent-ink: #0f1708; --accent-soft: #24311a; --accent-line: #4d6a2f; --link: #a9d575;
+  --acc-rgb: 147, 196, 95; --acc-hi: #a9d878; --acc-lo: #6f9e40; --acc-edge: #93c45f;
+  --ok: #93c45f; --ok-soft: #1f2c16; --hero: #e5b04c; --warn: #e3a641; --warn-soft: #3a2c12; --bad: #c0503f; --bad-ink: #f2a597; --bad-soft: #301914; --bad-line: #63302a;
+  --r0: #4b3e31; --r1: #3a6a8c; --r2: #4f8a3a; --r3: #a06f18; --r4: #7b4ba2;
+  --glass: rgba(30, 21, 13, .82); --glass-2: rgba(45, 33, 22, .8); --glass-3: rgba(60, 45, 30, .86); --glass-strong: rgba(28, 20, 13, .97);
+  --glass-line: rgba(160, 200, 110, .12); --glass-line2: rgba(160, 200, 110, .24); --glass-hi: inset 0 1px 0 rgba(255, 230, 180, .05);
+  --shadow: 0 10px 28px rgba(0, 0, 0, .45);
+  --frame: rgba(170, 120, 70, .55); --frame-gap: rgba(20, 13, 8, .55); --frame-inner: rgba(147, 196, 95, .16);
+  --input-bg: rgba(14, 9, 5, .6); --topbar: rgba(26, 18, 11, .93); --hp-fill: linear-gradient(90deg, #5c8f3e, #8cc063); --brand-hue: 210deg;
+  --backdrop:
+    radial-gradient(1200px 900px at 50% 40%, transparent 45%, rgba(0, 0, 0, .55) 100%),
+    radial-gradient(900px 600px at 15% -5%, rgba(170, 220, 120, .1), transparent 60%),
+    url(../img/skins/grove-wood.svg) 0 0 / 600px 600px,
+    #1b120b;
+  --corner-art: url(../img/skins/grove-vine-tl.svg) left -10px top 60px / 520px auto no-repeat, url(../img/skins/grove-vine-br.svg) right -10px bottom -10px / 520px auto no-repeat;
+}
+html[data-skin="grove"] body::after { opacity: .75; }
+/* panels are planks: the wood grain under a dark stain */
+html[data-skin="grove"] .card, html[data-skin="grove"] .sidepanel, html[data-skin="grove"] .sheet-cols > .col-main {
+  background: linear-gradient(var(--glass), var(--glass)), url(../img/skins/grove-wood.svg) 0 0 / 600px 600px; }
+html[data-skin="grove"] .hero-card { background: url(../img/skins/grove-sprig.svg) right 10px bottom 8px / 84px auto no-repeat,
+  linear-gradient(var(--glass), var(--glass)), url(../img/skins/grove-wood.svg) 0 0 / 600px 600px; }
+html[data-skin="grove"] section.card[style*="background:transparent"] { background: transparent !important; }
+html[data-skin="grove"] .sc-head h3::before, html[data-skin="grove"] .sub-head::before { content: '❦ '; color: var(--accent); }
+
+/* ------------------------------------------------------------ Cosmos: the void, a ringed world, a sigil of power */
+html[data-skin="cosmos"] {
+  color-scheme: dark; --ov: 220, 210, 255;
+  --bg: #07060f; --header: #0d0b1c; --panel: #131027; --panel2: #1b1735; --panel3: #251f44;
+  --line: #29234d; --line2: #372f64; --line3: #1d1938;
+  --ink: #eeebff; --ink2: #d1caf4; --muted: #a59fce; --faint: #6e6898; --heading: #dccfff;
+  --accent: #ae8fff; --accent-ink: #12092a; --accent-soft: #241c47; --accent-line: #4c3d90; --link: #c5aeff;
+  --acc-rgb: 174, 143, 255; --acc-hi: #c8b2ff; --acc-lo: #7f5cf0; --acc-edge: #a487ff;
+  --ok: #5fd6ad; --ok-soft: #142c28; --hero: #f2c66d; --warn: #f0b85a; --warn-soft: #33290f; --bad: #c2475a; --bad-ink: #f6a3b0; --bad-soft: #2e1522; --bad-line: #5e2a3b;
+  --r0: #3a3560; --r1: #3b62ad; --r2: #2c8a78; --r3: #a3732a; --r4: #8c50d4;
+  --glass: rgba(18, 15, 38, .66); --glass-2: rgba(30, 25, 58, .6); --glass-3: rgba(44, 37, 82, .66); --glass-strong: rgba(13, 10, 28, .94);
+  --glass-line: rgba(174, 143, 255, .13); --glass-line2: rgba(174, 143, 255, .25); --glass-hi: inset 0 1px 0 rgba(220, 210, 255, .07);
+  --shadow: 0 10px 30px rgba(0, 0, 0, .4);
+  --frame: rgba(174, 143, 255, .32); --frame-gap: rgba(7, 6, 15, .5); --frame-inner: rgba(111, 231, 255, .12);
+  --input-bg: rgba(6, 5, 16, .6); --topbar: rgba(10, 8, 24, .8); --hp-fill: linear-gradient(90deg, #2fae8a, #6fe7ff); --brand-hue: 50deg;
+  --backdrop:
+    url(../img/skins/cosmos-stars.svg) 0 0 / 400px 400px,
+    url(../img/skins/cosmos-stars.svg) 170px 230px / 260px 260px,
+    radial-gradient(1100px 650px at 8% -12%, rgba(130, 90, 255, .24), transparent 62%),
+    radial-gradient(800px 600px at 100% 15%, rgba(60, 200, 230, .12), transparent 60%),
+    radial-gradient(900px 700px at 55% 120%, rgba(190, 70, 220, .16), transparent 60%),
+    #07060f;
+  --corner-art: url(../img/skins/cosmos-planet.svg) right -40px top 60px / 520px auto no-repeat, url(../img/skins/cosmos-void.svg) left -90px bottom -90px / 480px auto no-repeat;
+}
+html[data-skin="cosmos"] body::after { opacity: .85; }
+html[data-skin="cosmos"] h1, html[data-skin="cosmos"] .sc-head h3, html[data-skin="cosmos"] .hero-id h1 { text-shadow: 0 0 14px rgba(174, 143, 255, .5); }
+html[data-skin="cosmos"] .sc-head h3::before, html[data-skin="cosmos"] .sub-head::before { content: '✦ '; }
+html[data-skin="cosmos"] .card, html[data-skin="cosmos"] .hero-card, html[data-skin="cosmos"] .sidepanel, html[data-skin="cosmos"] .sheet-cols > .col-main {
+  box-shadow: inset 0 0 0 3px var(--frame-gap), inset 0 0 0 4px var(--frame-inner), 0 0 24px rgba(130, 90, 255, .12), var(--shadow); }

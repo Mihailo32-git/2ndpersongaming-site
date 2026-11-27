@@ -1,6 +1,7 @@
 // Installable app + offline: registers the service worker, shows "new version" and install prompts,
 // and the "App & offline" panel (download all rules text for use without internet).
 import { modal, toast, esc } from './ui.js';
+import { SKINS, currentSkin, setSkin } from './theme.js';
 
 const sw = 'serviceWorker' in navigator ? navigator.serviceWorker : null;
 let reg = null;
@@ -114,7 +115,9 @@ export async function openAppPanel() {
         <div class="app-progress" hidden><div></div></div></div>
         ${allCr ? '<span class="badge ok-badge">Saved</span>' : `<button type="button" class="btn" data-dl="creatures" ${navigator.onLine ? '' : 'disabled'}>Download (~${mb(st.sizes?.creatures)} MB)</button>`}</div>` : ''}
       <div class="app-row"><div><b>Updates</b><p class="muted small" id="updMsg">Version ${esc(st?.version || '–')}. New versions are picked up by themselves; check here if one hasn’t shown up.</p></div>
-        <button type="button" class="btn" id="updCheck" ${navigator.onLine ? '' : 'disabled'}>Check for updates</button></div>`;
+        <button type="button" class="btn" id="updCheck" ${navigator.onLine ? '' : 'disabled'}>Check for updates</button></div>
+      <div class="app-row"><div><b>Theme</b><p class="muted small">How the site looks on this device.</p>
+        <div class="theme-pick" role="radiogroup" aria-label="Theme">${SKINS.map((k) => `<button type="button" class="btn small ${currentSkin().id === k.id ? 'primary' : ''}" role="radio" aria-checked="${currentSkin().id === k.id}" data-skin-pick="${esc(k.id)}" title="${esc(k.note)}">${esc(k.name)}</button>`).join('')}</div></div></div>`;
     const upd = m.body.querySelector('#updCheck');
     const updMsg = m.body.querySelector('#updMsg');
     upd.onclick = async () => {
@@ -129,6 +132,7 @@ export async function openAppPanel() {
       else if (res === 'unsupported') { upd.textContent = 'Reload'; upd.dataset.ready = '1'; updMsg.textContent = 'This browser keeps no offline copy, so reloading the page always gets the newest version.'; }
       else { upd.textContent = 'Try again'; updMsg.textContent = navigator.onLine ? 'Couldn’t get the new version yet (it may still be going up). Try again in a minute.' : 'You’re offline. Connect to the internet and try again.'; }
     };
+    m.body.querySelectorAll('[data-skin-pick]').forEach((b) => (b.onclick = () => { setSkin(b.dataset.skinPick); draw(); }));
     const inst = m.body.querySelector('#appInstall');
     if (inst) inst.onclick = async () => { const e = installEvent; installEvent = null; e.prompt(); await e.userChoice.catch(() => null); draw(); notify(); };
     m.body.querySelectorAll('[data-dl]').forEach((dl) => (dl.onclick = async () => {
