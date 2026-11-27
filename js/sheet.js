@@ -420,8 +420,38 @@ function psiExtras(ref) {
     + alts.map((i) => `<div class="rules-text psi-amp"><p><a class="ref" data-ref="${esc(refOf(i.rec).slice(1))}"><b>${esc(i.rec.name)}</b></a></p>${i.rec.altAmp}</div>`).join('');
   return html;
 }
+// Double Slice: the two Strikes with the weapons in hand, in either order (the second takes −2 unless it's agile).
+// Dual Thrower lets thrown and one-handed ranged weapons join in; Flensing Slice's bleed follows the bigger weapon.
+function doubleSliceExtras() {
+  const thrower = ch.ownedSlugs.has('dual-thrower');
+  const ok = (st) => st.item && st.item.equipped && st.rec.type === 'weapon' && st.rec.usage === 'held-in-one-hand'
+    && (!st.ranged || (thrower && (st.traits || []).some((t) => /^thrown/.test(t) || st.rec.range)));
+  const all = ch.strikes.filter(ok).filter((st, i, a) => a.findIndex((x) => x.item === st.item) === i);
+  // The two in hand: melee weapons first, then (Dual Thrower) thrown or one-handed ranged ones.
+  const ws = [...all.filter((x) => !x.ranged), ...all.filter((x) => x.ranged)].slice(0, 2);
+  let html = '<h4 class="act-x-h">Your Double Slice <span class="muted small">each Strike uses your current multiple attack penalty; it counts as two attacks</span></h4>';
+  if (ws.length < 2) return html + `<p class="small muted">Equip two one-handed melee weapons${thrower ? ' (or thrown / one-handed ranged weapons, Dual Thrower)' : ''} to see the numbers here.</p>`;
+  const dice = (st) => Number((String(st.damage).match(/^(\d+)d/) || [])[1]) || 1;
+  const rows = [];
+  for (const [a, b] of [[ws[0], ws[1]], [ws[1], ws[0]]]) {
+    const pen = (b.traits || []).includes('agile') ? 0 : -2;
+    rows.push({ pen, html: `<td>${esc(a.name)} → ${esc(b.name)}</td><td class="mono">${signed(a.attack)}</td><td class="mono">${signed(b.attack + pen)}${pen ? ' <span class="muted small">(−2, not agile)</span>' : ''}</td>` });
+  }
+  const better = rows[0].pen !== rows[1].pen;
+  html += `<table class="stat-table"><tr><th>Order</th><th>First</th><th>Second</th></tr>${rows.map((r) => `<tr>${r.html.replace('</td>', better && !r.pen ? ' <span class="badge ok-badge">better</span></td>' : '</td>')}</tr>`).join('')}</table>
+    <p class="small muted">Both hit: ${ws.map((w) => `${esc(w.damage)}`).join(' + ')}, combined before resistances and weaknesses; precision damage only once.</p>`;
+  const rest = all.filter((x) => !ws.includes(x));
+  if (thrower && rest.length) html += `<p class="small muted">Dual Thrower: either Strike can be a throw or a one-handed ranged Strike instead (${rest.map((x) => `${esc(x.name)} ${signed(x.attack)}`).join(', ')}).</p>`;
+  if (ch.ownedSlugs.has('flensing-slice')) {
+    const n = Math.min(4, Math.max(...ws.map(dice)));
+    html += `<p class="small"><b>Flensing Slice</b> (after both hit): ${n}d8 persistent bleed, and the target is off-guard with physical resistances −5 until your next turn.</p>`;
+  }
+  if (ch.ownedSlugs.has('dual-onslaught')) html += '<p class="small"><b>Dual Onslaught:</b> if both miss, apply one weapon\u2019s hit effects (not on a critical failure).</p>';
+  return html;
+}
 function actionExtras(ref) {
   let html = psiExtras(ref);
+  if (ref === '@feats/double-slice') html += doubleSliceExtras();
   if (ref === '@actions/treat-wounds' || ref === '@feats/battle-medicine') {
     // Chirurgeon: Crafting proficiency counts for the higher DCs.
     const rank = Math.max(ch.ranks.skills.medicine || 0, ch.skills.medicine.reqRank || 0);
