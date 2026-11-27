@@ -1498,3 +1498,7 @@ html:not([data-gm]) .nav a[href="gm.html"] { display: none; }
 @media (max-width: 420px) { .brand-x { display: none; } }
 /* Slim footer: the full Paizo / ORC notices live on the Licenses page */
 .footer.footer-min, html[data-skin] .footer.footer-min { padding: 10px 24px 24px; text-align: center; border-top: 0; background: none; box-shadow: none; }
+/* Back button at the top left of the top bar (added by pwa.js when you came from another page) */
+.topbar .back-btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px 4px 6px; margin-right: -6px; min-height: 36px; font-size: 14px; }
+.topbar .back-btn .back-chev { font-size: 24px; line-height: 1; margin-top: -3px; }
+@media (max-width: 600px) { .topbar .back-btn .back-txt { display: none; } .topbar .back-btn { padding: 4px 8px; } }

@@ -160,3 +160,37 @@ export async function openAppPanel() {
   };
   draw();
 }
+
+// ---------------------------------------------------------------- back button
+// A "‹ GM screen" / "‹ Sheet" button at the top left when you came here from another page of this site, so the app
+// installed on a tablet (no browser back button) can return, e.g. from a player's read-only sheet to the GM screen.
+// Not on the Characters page, which is home.
+const PAGE_NAMES = { 'index.html': 'Characters', '': 'Characters', 'gm.html': 'GM screen', 'sheet.html': 'Sheet', 'builder.html': 'Builder', 'levelup.html': 'Level up', 'licenses.html': 'Licenses' };
+const startLen = history.length;
+(function backButton() {
+  const bar = document.querySelector('.topbar');
+  const here = location.pathname.split('/').pop();
+  if (!bar || here === '' || here === 'index.html' || here === 'reset.html') return;
+  let from;
+  try { from = new URL(document.referrer); } catch (e) { return; }
+  if (from.origin !== location.origin || from.href.split('#')[0] === location.href.split('#')[0]) return;
+  const page = from.pathname.split('/').pop();
+  const name = PAGE_NAMES[page];
+  if (!name) return;
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'btn ghost back-btn';
+  b.setAttribute('aria-label', 'Back to ' + name); b.title = 'Back to ' + name;
+  b.innerHTML = `<span class="back-chev" aria-hidden="true">‹</span><span class="back-txt">${esc(name)}</span>`;
+  b.onclick = () => {
+    // Skip the entries this page added itself (the builder's # tabs), then go one more step back.
+    const steps = Math.max(0, history.length - startLen) + 1;
+    if (history.length > steps) {
+      let left = false;
+      window.addEventListener('pagehide', () => { left = true; }, { once: true });
+      history.go(-steps);
+      // If that didn't leave the page (odd history), go to the page directly.
+      setTimeout(() => { if (!left) location.href = from.href; }, 800);
+    } else location.href = from.href;
+  };
+  bar.insertBefore(b, bar.firstChild);
+})();
