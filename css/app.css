@@ -1367,6 +1367,8 @@ html[data-theme="light"] .gm-enc-top .gm-enc-name:hover, html[data-theme="light"
 .alch-card h3.sub-head, .col-main .alch-card h3.sub-head { margin: 0; }
 .alch-card .sub-head .muted { font-weight: 500; margin-left: 4px; }
 .alch-note { margin: 6px 0 10px; }
+.alch-rules { margin: 4px 0 6px; padding-left: 18px; font-size: 0.86rem; line-height: 1.45; }
+.alch-rules li { margin: 3px 0; }
 .alch-btns { gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .vial-num { font-size: 14px; } .vial-num b { font-size: 20px; color: var(--accent); }
 .vial-pips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }

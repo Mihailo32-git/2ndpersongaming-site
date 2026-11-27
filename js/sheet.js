@@ -179,6 +179,7 @@ function statInfo(key) {
   if (key === 'perception') return { title: 'Perception', stat: ch.perception, label: `Wis + ${RANKS[ch.perception.rank].toLowerCase()}`, value: base(ch.perception) };
   if (ch.saves[key]) { const s = ch.saves[key]; return { title: titleCase(key), stat: s, label: `${ATTR_NAMES[s.attr]} + ${RANKS[s.rank].toLowerCase()}`, value: base(s) }; }
   const st = ch.skills[key];
+  if (st.via) return { title: titleCase(key), stat: st, label: `${ATTR_NAMES[st.attr]} + ${RANKS[st.rank].toLowerCase()} in ${st.via}`, value: base(st) };
   return { title: titleCase(key), stat: st, skill: true, label: `${ATTR_NAMES[st.attr]}${st.attr !== st.defaultAttr ? ' (house rule)' : ''} + ${RANKS[st.rank].toLowerCase()} proficiency`, value: base(st) };
 }
 function statModal(key) {
@@ -328,7 +329,7 @@ function render() {
 
     <aside class="col-right card tight" style="margin:0">
       <h2 class="label" style="margin-bottom:6px">Skills</h2>
-      ${Object.keys(SKILLS).map((s) => { const k = ch.skills[s]; return `<div class="skill-row ${k.rank ? '' : 'untrained'}" data-skill="${s}" role="button" tabindex="0">${rankBadge(k.rank)}<span class="sk-name">${esc(titleCase(s))}${k.attr !== k.defaultAttr ? ` <span class="attr-tag" title="Uses ${esc(ATTR_NAMES[k.attr])} (house rule)">${k.attr.toUpperCase()}</span>` : ''}${sitOn(k) ? ' <span class="sit-mark" title="A situational bonus is on">✓</span>' : k.notes.length ? ' <span class="warn" title="Has situational modifiers: tap to tick one on">*</span>' : ''}</span><span class="sk-mod ${sitOn(k) ? 'sit-on' : ''}">${signed(k.total)}</span></div>`; }).join('')}
+      ${Object.keys(SKILLS).map((s) => { const k = ch.skills[s]; return `<div class="skill-row ${k.rank ? '' : 'untrained'}" data-skill="${s}" role="button" tabindex="0">${rankBadge(k.rank)}<span class="sk-name">${esc(titleCase(s))}${k.via ? ` <span class="attr-tag" title="Uses ${esc(k.via)}">CRA</span>` : k.attr !== k.defaultAttr ? ` <span class="attr-tag" title="Uses ${esc(ATTR_NAMES[k.attr])} (house rule)">${k.attr.toUpperCase()}</span>` : ''}${sitOn(k) ? ' <span class="sit-mark" title="A situational bonus is on">✓</span>' : k.notes.length ? ' <span class="warn" title="Has situational modifiers: tap to tick one on">*</span>' : ''}</span><span class="sk-mod ${sitOn(k) ? 'sit-on' : ''}">${signed(k.total)}</span></div>`; }).join('')}
       ${Object.entries(ch.lores).map(([n, l]) => `<div class="skill-row">${rankBadge(l.rank)}<span class="sk-name">${esc(/lore$/i.test(n) ? n : n + ' Lore')}</span><span class="sk-mod">${signed(l.total)}</span></div>`).join('')}
       <h2 class="label" style="margin:14px 0 6px">Proficiencies</h2>
       <table class="stat-table small">
@@ -418,8 +419,9 @@ function psiExtras(ref) {
 function actionExtras(ref) {
   let html = psiExtras(ref);
   if (ref === '@actions/treat-wounds' || ref === '@feats/battle-medicine') {
-    const rank = ch.ranks.skills.medicine || 0;
-    html += `<h4 class="act-x-h">Medicine DCs <span class="muted small">your Medicine ${signed(ch.skills.medicine.total)} (${esc(RANKS[rank].toLowerCase())})</span></h4>
+    // Chirurgeon: Crafting proficiency counts for the higher DCs.
+    const rank = Math.max(ch.ranks.skills.medicine || 0, ch.skills.medicine.reqRank || 0);
+    html += `<h4 class="act-x-h">Medicine DCs <span class="muted small">your Medicine ${signed(ch.skills.medicine.total)} (${esc(RANKS[rank].toLowerCase())}${ch.skills.medicine.reqRank > (ch.ranks.skills.medicine || 0) ? ', from Crafting' : ''})</span></h4>
       <table class="stat-table heal-dcs"><tr><th>DC</th><th>Needs</th><th>Success</th><th>Critical success</th></tr>
       ${HEAL_DCS.map(([dc, need, add]) => `<tr class="${rank >= need ? '' : 'out'}"><td class="mono">${dc}</td><td>${esc(RANKS[need].toLowerCase())}</td><td class="mono">2d8${add ? '+' + add : ''}</td><td class="mono">4d8${add ? '+' + add : ''}</td></tr>`).join('')}</table>
       <p class="small muted">${ref === '@actions/treat-wounds' ? 'Hit Points regained. Keep treating for a full hour to double them. ' : 'Hit Points restored. '}Critical failure: the target takes 1d8 damage.</p>`;
@@ -1155,6 +1157,53 @@ const ALCH_KINDS = [['bomb', 'Bombs'], ['elixir', 'Elixirs'], ['mutagen', 'Mutag
 const alchKind = (r) => (ALCH_KINDS.find(([t]) => (r.traits || []).includes(t)) || [null, 'Other'])[1];
 const alchChips = () => [{ id: 'all', label: 'All' }, ...ALCH_KINDS.map(([t, label]) => ({ id: t, label, test: (it) => (it.rec.traits || []).includes(t) })), { id: 'other', label: 'Other', test: (it) => alchKind(it.rec) === 'Other' }];
 
+/** Mutagenist: using a mutagen gives Int + half your level temporary HP. Returns true when it did. */
+function mutagenTemp(ref) {
+  const rec = db.get(ref);
+  if (!rec || !/mutagen/.test(rec.slug) || !ch.ownedSlugs.has('mutagenist')) return false;
+  const t = Math.max(0, ch.attrs.int) + Math.floor(ch.level / 2);
+  if (t <= state.temp) return false;
+  state.temp = t;
+  toast(`Mutagenist: ${t} temporary HP for 1 minute`, 'ok');
+  return true;
+}
+/** Rules from the research field and alchemist feats that change how vials and items work, as short lines. */
+function alchemyLines(vialStrike) {
+  const has = (s) => ch.ownedSlugs.has(s);
+  const L = ch.level, int = Math.max(0, ch.attrs.int);
+  const il = ch.resources?.versatileVials?.itemLevel || 1;
+  const dice = `${il >= 18 ? 4 : il >= 12 ? 3 : il >= 4 ? 2 : 1}d6`;
+  const vials = [], other = [];
+  if (has('bomber')) {
+    vials.push('<b>Field vials:</b> a vial Strike can deal cold, electricity or fire instead of acid (switch above Strikes).');
+    if (has('advanced-vials-bomber')) vials.push('<b>Advanced vials:</b> each vial can count as adamantine, cold iron or dawnsilver (or a precious material you wear or wield).');
+    other.push('<b>Bomber:</b> splash can hit only your primary target.' + (has('greater-field-discovery-bomber') ? ` Splash can reach ${has('expanded-splash') ? 15 : 10} feet (Greater Field Discovery).` : ''));
+  }
+  if (has('chirurgeon')) {
+    vials.push(`<b>Field vials:</b> a vial heals ${dice} HP (its damage): drink it, or throw it at a willing creature within 20 feet as an Interact action. It has the coagulant and healing traits.${has('advanced-vials-chirurgeon') ? ' Coagulant doesn’t apply to a creature at half its HP or less (Advanced Vials).' : ''}`);
+    if (has('soothing-vials')) vials.push('<b>Soothing Vials:</b> a creature under a mental effect healed by a vial can attempt a new Will save (+1 item) to end one.');
+    other.push(`<b>Chirurgeon:</b> your Crafting counts as Medicine for prerequisites and checks (Medicine ${signed(ch.skills.medicine.total)}).`);
+    if (has('field-discovery-chirurgeon')) other.push(`<b>Field Discovery:</b> healing elixirs you made also give ${int} temporary HP for 1 minute.`);
+    if (has('greater-field-discovery-chirurgeon')) other.push('<b>Greater Field Discovery:</b> elixirs of life you make with Quick Alchemy heal the maximum.');
+  }
+  if (has('mutagenist')) {
+    vials.push(`<b>Field vials:</b> drink one to suppress one mutagen drawback for 1 minute.${has('advanced-vials-mutagenist') ? ` You also gain resistance ${Math.floor(L / 2)} to physical damage for that minute (Advanced Vials).` : ''}`);
+    other.push(`<b>Mutagenist:</b> using a mutagen gives you ${int + Math.floor(L / 2)} temporary HP for 1 minute (added when you add a mutagen effect here); not again for 1 minute.`);
+    if (has('field-discovery-mutagenist')) other.push('<b>Field Discovery:</b> while under a mutagen, you can end it to reroll a Fortitude save (fortune).');
+    if (has('greater-field-discovery-mutagenist')) other.push('<b>Greater Field Discovery:</b> two mutagens at once, with both drawbacks.');
+  }
+  if (has('toxicologist')) {
+    vials.push(`<b>Field vials:</b> your vials deal poison. Apply one to a weapon or ammunition as an injury poison: the first hit this turn deals +${dice} poison${has('advanced-vials-toxicologist') && vialStrike ? ` and ${vialStrike.splash} persistent poison (Advanced Vials)` : ''}.`);
+    other.push('<b>Toxicologist:</b> Activate an injury poison as one action when applying it to a weapon you hold. Your infused poisons hit creatures immune to poison, as acid.');
+    if (has('greater-field-discovery-toxicologist')) other.push('<b>Greater Field Discovery:</b> a failed initial save against your infused injury poison sprays it onto an adjacent creature.');
+  }
+  if (has('abundant-vials')) other.push('<b>Abundant Vials:</b> you’re quickened; the extra action can only be Quick Alchemy to make one quick vial.');
+  if (has('extend-elixir')) other.push(`<b>Extend Elixir:</b> your infused elixirs of 1 minute or more last twice as long on you${has('eternal-elixir') ? `; Eternal Elixir makes one of level ${Math.floor(L / 2)} or lower last indefinitely` : ''}.`);
+  const quickN = has('alchemical-alacrity') ? 3 : has('double-brew') ? 2 : 1;
+  const additives = ch.items.filter((i) => i.pack === 'feats' && (i.rec.traits || []).some((t) => /^additive/.test(t))).map((i) => i.rec)
+    .filter((r, i, a) => a.findIndex((x) => x.slug === r.slug) === i).sort((a, b) => a.name.localeCompare(b.name));
+  return { vials, other, quickN, additives };
+}
 TAB_RENDER.alchemy = (el) => {
   const info = alchemyInfo(ch, state);
   const v = info.vials;
@@ -1164,17 +1213,24 @@ TAB_RENDER.alchemy = (el) => {
   const rows = [...best.values()].sort((a, b) => a.name.localeCompare(b.name));
   const canQuick = !!(info.quick && v && !readOnly);
   const vialStrike = ch.strikes.find((x) => x.rec.slug === 'versatile-vial');
+  const gather = ch.ownedSlugs.has('alchemical-expertise') ? 3 : 2; // Alchemical Expertise: three vials per 10 minutes
+  const lines = alchemyLines(vialStrike);
   el.innerHTML = `<div class="alch-grid">
     <section class="alch-col">
       ${v ? `<div class="alch-card">
         <div class="row between"><h3 class="sub-head">${esc(v.label)}</h3><span class="vial-num"><b>${v.left}</b> / ${v.max}</span></div>
         <div class="vial-pips" role="group" aria-label="${esc(v.label)}">${Array.from({ length: v.max }, (_, i) => `<button type="button" class="vial ${i < v.left ? 'on' : ''}" data-vial="${i}" aria-label="Vial ${i + 1}: ${i < v.left ? 'ready' : 'used'}" ${readOnly ? 'disabled' : ''}></button>`).join('')}</div>
-        ${readOnly ? '' : `<div class="row alch-btns"><button type="button" class="btn small" data-vuse ${v.left ? '' : 'disabled'}>Use a vial</button><button type="button" class="btn small" data-vgain ${v.left < v.max ? '' : 'disabled'} title="Every 10 minutes in exploration mode you get 2 vials back">+2 · 10 min exploring</button></div>`}
-        ${vialStrike ? `<p class="small muted alch-note">As a bomb: <b class="mono">${signed(vialStrike.attack)}</b> to hit · ${esc(vialStrike.damage)} · ${vialStrike.splash} splash (also in Strikes). They refill at Rest.</p>` : ''}
+        ${readOnly ? '' : `<div class="row alch-btns"><button type="button" class="btn small" data-vuse ${v.left ? '' : 'disabled'}>Use a vial</button><button type="button" class="btn small" data-vgain ${v.left < v.max ? '' : 'disabled'} title="Every 10 minutes in exploration mode you get ${gather} vials back">+${gather} · 10 min exploring</button></div>`}
+        ${vialStrike ? `<p class="small muted alch-note">As a bomb: <b class="mono">${signed(vialStrike.attack)}</b> to hit · ${esc(vialStrike.damage)} · ${vialStrike.splash} splash${vialStrike.range ? ` · ${vialStrike.range} ft` : ''} (also in Strikes). They refill at Rest.</p>` : ''}
+        ${lines.vials.length ? `<ul class="alch-rules">${lines.vials.map((x) => `<li>${x}</li>`).join('')}</ul>` : ''}
+      </div>` : ''}
+      ${lines.other.length || lines.additives.length ? `<div class="alch-card"><h3 class="sub-head">Your field and feats</h3>
+        ${lines.other.length ? `<ul class="alch-rules">${lines.other.map((x) => `<li>${x}</li>`).join('')}</ul>` : ''}
+        ${lines.additives.length ? `<p class="small muted alch-note">Additives: add one to a consumable you make with Quick Alchemy (one per item, once a round; not quick vials).</p><div class="act-mods">${lines.additives.map((r) => `<a class="ref chip-btn" data-show="${esc(refOf(r))}">${esc(r.name)}</a>`).join('')}</div>` : ''}
       </div>` : ''}
       <div class="alch-card">
         <div class="row between"><h3 class="sub-head">Formulas <span class="muted">${rows.length}</span></h3>${readOnly ? '' : '<button type="button" class="btn small" data-addformula>+ Add formula</button>'}</div>
-        ${canQuick ? '<p class="small muted alch-note">Quick Alchemy: spend a vial to make one now; it lasts until the start of your next turn.</p>' : ''}
+        ${canQuick ? `<p class="small muted alch-note">Quick Alchemy: spend a vial to make one now; it lasts until the start of your next turn${ch.ownedSlugs.has('enduring-alchemy') ? ' (tools and elixirs: the end of your next turn, Enduring Alchemy)' : ''}.${lines.quickN > 1 ? ` You can make up to ${lines.quickN} at once (one vial each).` : ''}</p>` : ''}
         ${rows.length > 6 ? '<input type="search" class="alch-search" placeholder="Search formulas…" aria-label="Search formulas">' : ''}
         <div class="alch-list">${rows.map((r) => `<div class="alch-row" data-n="${esc(r.name.toLowerCase())}"><button type="button" class="alch-name" data-show="${esc(refOf(r))}">${esc(r.name)}</button><span class="muted small">Lv ${r.level}</span>${canQuick ? `<button type="button" class="btn small" data-quick="${esc(refOf(r))}" ${v.left ? '' : 'disabled'}>Quick</button>` : ''}</div>`).join('')
           || `<p class="muted small">No alchemical formulas yet.${readOnly ? '' : ' Add the ones in your formula book; one formula covers every level of an item.'}</p>`}</div>
@@ -1183,7 +1239,7 @@ TAB_RENDER.alchemy = (el) => {
     <section class="alch-col">
       ${info.preps.map((p) => `<div class="alch-card">
         <div class="row between"><h3 class="sub-head">${esc(p.label)}</h3><span class="small"><b>${p.left}</b> of ${p.max} left</span></div>
-        <p class="small muted alch-note">Up to ${p.max} items from your formulas, made each morning. Rest makes the same picks ready again.</p>
+        <p class="small muted alch-note">Up to ${p.max} items from your formulas, made each morning. Rest makes the same picks ready again.${ch.ownedSlugs.has('powerful-alchemy') && ch.classDC ? ` Infused items that allow a save can use your class DC <b>${ch.classDC.total}</b> (Powerful Alchemy).` : ''}</p>
         <div class="pslots">${p.slots.map((x, i) => { const r = x && db.get(x.ref); return r
           ? `<div class="pslot ${x.used ? 'used' : ''}"><button type="button" class="alch-name" data-show="${esc(x.ref)}">${esc(r.name)}</button><span class="muted small">Lv ${r.level}</span>${readOnly ? '' : `<button type="button" class="btn small ${x.used ? '' : 'primary'}" data-puse="${i}" data-ps="${esc(p.slug)}">${x.used ? 'Undo' : 'Use'}</button><button type="button" class="icon-btn" data-pedit="${i}" data-ps="${esc(p.slug)}" aria-label="Change ${esc(r.name)}">✎</button>`}</div>`
           : `<button type="button" class="pslot empty" data-pfill="${i}" data-ps="${esc(p.slug)}" ${readOnly ? 'disabled' : ''}>+ Choose an item</button>`; }).join('')}</div>
@@ -1195,7 +1251,7 @@ TAB_RENDER.alchemy = (el) => {
   const setLeft = (n) => { al.vialsUsed = v.max - Math.max(0, Math.min(v.max, n)); change(); };
   $$('[data-vial]', el).forEach((b) => (b.onclick = () => { const i = Number(b.dataset.vial); setLeft(i < v.left ? i : i + 1); }));
   const vu = $('[data-vuse]', el); if (vu) vu.onclick = () => setLeft(v.left - 1);
-  const vg = $('[data-vgain]', el); if (vg) vg.onclick = () => setLeft(v.left + 2);
+  const vg = $('[data-vgain]', el); if (vg) vg.onclick = () => setLeft(v.left + gather);
   $$('[data-quick]', el).forEach((b) => (b.onclick = () => { const r = db.get(b.dataset.quick); setLeft(v.left - 1); toast(`Quick Alchemy: ${r ? r.name : 'item'} made (1 vial). It lasts until the start of your next turn.`, 'ok'); }));
   const search = $('.alch-search', el);
   if (search) search.oninput = () => { const q = search.value.trim().toLowerCase(); $$('.alch-row', el).forEach((r) => (r.hidden = !!q && !r.dataset.n.includes(q))); };
@@ -1403,7 +1459,7 @@ function wire() {
     state.favEffects = state.favEffects.includes(r) ? state.favEffects.filter((x) => x !== r) : [...state.favEffects, r];
     saveState(); render();
   }));
-  $$('[data-efq]', main).forEach((b) => (b.onclick = () => { state.effects.push({ ref: b.dataset.efq }); change(); }));
+  $$('[data-efq]', main).forEach((b) => (b.onclick = () => { state.effects.push({ ref: b.dataset.efq }); mutagenTemp(b.dataset.efq); change(); }));
   $('#addCond').onclick = () => {
     const common = ['frightened', 'off-guard', 'prone', 'grabbed', 'sickened', 'clumsy', 'enfeebled', 'stupefied', 'drained', 'slowed', 'stunned', 'quickened', 'concealed', 'hidden', 'fatigued', 'persistent-damage'];
     const items = db.list('conditions').map((c) => ({ key: c.slug, name: c.name, rec: c, group: common.includes(c.slug) ? 'Common in combat' : 'All conditions', meta: c.valued ? 'Has a value' : '' }))
@@ -1427,7 +1483,7 @@ function wire() {
       title: 'Add an effect', db, items, placeholder: 'Search effects (heroism, inspire, mutagen…)', limit: 300,
       chips: [{ id: 'all', label: 'All' }, { id: 'spell', label: 'Spells', test: (i) => i.rec._pack === 'spell-effects' }, { id: 'feat', label: 'Feats', test: (i) => i.rec._pack === 'feat-effects' }, { id: 'eq', label: 'Items', test: (i) => i.rec._pack === 'equipment-effects' }],
       detail: (it) => `<h3>${esc(it.name)}</h3>`, textRef: (it) => it.key, pickLabel: (it) => 'Add ' + it.name,
-      onPick: (it) => { state.effects.push({ ref: it.key }); change(); toast('Effect added'); },
+      onPick: (it) => { state.effects.push({ ref: it.key }); if (!mutagenTemp(it.key)) toast('Effect added'); change(); },
     });
   };
 }

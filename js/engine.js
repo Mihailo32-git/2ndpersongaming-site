@@ -14,6 +14,19 @@ import { runeSlots } from './runes.js';
 
 export const BOOST_LEVELS = [5, 10, 15, 20];
 const FEAT_PACKS = ['feats', 'classfeatures', 'ancestryfeatures'];
+/**
+ * Proficiency-type modifiers (Untrained Improvisation, Martial Experience) don't add to your proficiency bonus:
+ * the higher of the two counts. Returns the stacked total to add on top of the rank bonus, and the modifiers that apply.
+ */
+function profAdjust(s, rb) {
+  const p = s.used.filter((m) => m.type === 'proficiency');
+  if (!p.length) return s;
+  const pv = Math.max(...p.map((m) => m.value));
+  const rest = s.total - p.reduce((a, m) => a + m.value, 0);
+  if (pv <= rb) return { ...s, total: rest, used: s.used.filter((m) => m.type !== 'proficiency') };
+  // Higher than the rank bonus: it replaces it (shown as the difference).
+  return { ...s, total: rest + pv - rb, used: s.used.map((m) => (m.type === 'proficiency' ? { ...m, value: pv - rb } : m)) };
+}
 const AEL_PRIORITY = { multiply: 10, add: 20, subtract: 20, remove: 20, downgrade: 30, upgrade: 40, override: 50 };
 const WEAPON_GROUPS = ['axe', 'bomb', 'bow', 'brawling', 'club', 'crossbow', 'dart', 'firearm', 'flail', 'hammer', 'knife', 'pick', 'polearm', 'shield', 'sling', 'spear', 'sword'];
 
@@ -991,13 +1004,25 @@ export class Engine {
       const attr = ATTRS.includes(altAttr[skill]) ? altAttr[skill] : defaultAttr;
       const { mods, notes } = statMods(skill, attr, ['skill-check']);
       if (checkPen && (attr === 'str' || attr === 'dex') && !((armor.rec.traits || []).includes('flexible') && (skill === 'acrobatics' || skill === 'athletics'))) mods.push({ label: 'Armor check penalty', value: checkPen, type: 'untyped' });
-      const s = stackMods(mods);
+      const s = profAdjust(stackMods(mods), rankBonus(R.skills[skill], L));
       ch.skills[skill] = { total: A[attr] + rankBonus(R.skills[skill], L) + s.total, rank: R.skills[skill], attr, defaultAttr, mods: s.used, notes, source: ch.skillSources[skill] };
+    }
+    // Chirurgeon: use your Crafting proficiency for anything that needs a Medicine rank, and your Crafting modifier
+    // for Medicine checks (when that's better).
+    if (ch.items.some((i) => i.rec.slug === 'chirurgeon') && ch.skills.medicine && ch.skills.crafting) {
+      const med = ch.skills.medicine, cAttr = ch.skills.crafting.attr;
+      const { mods, notes } = statMods('medicine', cAttr, ['skill-check']);
+      if (checkPen && (cAttr === 'str' || cAttr === 'dex')) mods.push({ label: 'Armor check penalty', value: checkPen, type: 'untyped' });
+      const s = profAdjust(stackMods(mods), rankBonus(R.skills.crafting, L));
+      const total = A[cAttr] + rankBonus(R.skills.crafting, L) + s.total;
+      const reqRank = Math.max(R.skills.medicine || 0, R.skills.crafting || 0);
+      if (total > med.total) ch.skills.medicine = { ...med, total, rank: R.skills.crafting, attr: cAttr, defaultAttr: cAttr, mods: s.used, notes, via: 'Crafting (Chirurgeon)', reqRank };
+      else med.reqRank = reqRank;
     }
     ch.lores = {};
     for (const [name, rank] of Object.entries(R.lores)) {
       const { mods } = statMods('lore', 'int', ['skill-check', sluggify(name)]);
-      const s = stackMods(mods);
+      const s = profAdjust(stackMods(mods), rankBonus(rank, L));
       ch.lores[name] = { total: A.int + rankBonus(rank, L) + s.total, rank };
     }
     // Class DC
@@ -1099,6 +1124,18 @@ export class Engine {
       max: r.maxSlots != null ? this._value(ch, inst, String(r.maxSlots).replace('@actor.system.abilities', '@actor.abilities')) : null,
       filter: r.craftableItems, source: inst.rec.name,
     }));
+    // Feats that raise a crafting entry's daily items (Efficient Alchemy: 6 + Int, Advanced Efficient Alchemy: 8/10 + Int).
+    for (const c of ch.crafting) {
+      if (c.max == null || !c.slug) continue;
+      const path = `system.crafting.entries.${camelCase(c.slug)}.maxSlots`;
+      for (const { r, inst } of ch.rules) {
+        if (r.key !== 'ActiveEffectLike' || r.path !== path) continue;
+        if (r.predicate && !test(this._subst(r.predicate, ch, inst), ch.options)) continue;
+        const v = this._value(ch, inst, String(r.value).replace(/@actor\.system\.abilities/g, '@actor.abilities'));
+        if (typeof v !== 'number' || Number.isNaN(v)) continue;
+        if (r.mode === 'upgrade') c.max = Math.max(c.max, v); else if (r.mode === 'add') c.max += v; else if (r.mode === 'override') c.max = v;
+      }
+    }
     // Bulk
     let bulk = 0;
     for (const it of inv) bulk += (Number(it.rec.bulk) || 0) * (it.qty || 1) / (it.rec.per > 1 ? it.rec.per : 1);
@@ -1159,8 +1196,10 @@ export class Engine {
     if (vialRec) {
       const il = vials.itemLevel || 1, n = il >= 18 ? 4 : il >= 12 ? 3 : il >= 4 ? 2 : 1;
       const fv = (ch.toggles || []).find((t) => t.option === 'bomber-field-vials' && typeof t.on === 'string');
-      const vType = fv ? fv.on : vialRec.damage.type;
-      const vTraits = fv ? [...(vialRec.traits || []).filter((t) => t !== vialRec.damage.type), fv.on] : vialRec.traits;
+      // Toxicologist field vials have the poison trait and deal poison damage instead of acid.
+      const tox = (ch.ownedSlugs || new Set()).has('toxicologist') || ch.items.some((i) => i.rec.slug === 'toxicologist');
+      const vType = fv ? fv.on : tox ? 'poison' : vialRec.damage.type;
+      const vTraits = vType !== vialRec.damage.type ? [...(vialRec.traits || []).filter((t) => t !== vialRec.damage.type), vType] : vialRec.traits;
       weapons.push({ rec: { ...vialRec, level: il, damage: { ...vialRec.damage, dice: n, type: vType }, traits: vTraits, splash: n, rules: [] }, source: vials.source,
         item: { potency: n - 1, potencyLabel: 'Vial item bonus', left: Math.max(0, vials.max - (Number(al.vialsUsed) || 0)) } });
     }
@@ -1246,7 +1285,7 @@ export class Engine {
       const notes = am.notes.filter((n) => !onlyItem(n));
       if (potency) mods.push({ label: item?.potencyLabel || 'Potency rune', value: potency, type: 'item' });
       if (rec.bonusAtk) mods.push({ label: 'Item bonus', value: rec.bonusAtk, type: 'item' }); // alchemical bombs (+1 moderate, +2 greater…)
-      const s = stackMods(mods);
+      const s = profAdjust(stackMods(mods), rankBonus(rank, L));
       const attack = A[attr] + rankBonus(rank, L) + s.total;
       const agile = traits.includes('agile');
       const dice = (rec.damage?.dice || 1) * (1 + striking);
@@ -1373,6 +1412,13 @@ export class Engine {
       }
       if (persistExtra.length) persistent = [persistent, ...persistExtra].filter(Boolean).join(', ');
       if (item && item.oversized) runeNotes.push({ label: 'Large weapon', text: 'You\u2019re clumsy 1 while wielding it (Titan Mauler).' });
+      // Far Lobber: alchemical bombs (versatile vials too) have a 30-foot range increment; Uncanny Bombs: 60 feet,
+      // less cover and no flat check against concealed targets.
+      let bombRange = null;
+      if (isAlchBomb && feats.has('uncanny-bombs')) {
+        bombRange = 60;
+        runeNotes.push({ label: 'Uncanny Bombs', text: 'Reduce the circumstance bonus to AC from cover by 1, and automatically succeed at the flat check against a concealed target.' });
+      } else if (isAlchBomb && feats.has('far-lobber')) bombRange = 30;
       // Flat damage (die "") such as Acid Flask's 1 acid.
       const DIES = ['d4', 'd6', 'd8', 'd10', 'd12'];
       let die = rec.damage ? (rec.damage.die || '') : 'd4';
@@ -1385,7 +1431,7 @@ export class Engine {
           + Object.entries(extras).map(([t, v]) => ` + ${v} ${t}`).join('') + runeDice.join('') + extraDice.map((x) => x.text).join(''),
         stratagem: wOpts.has('check:substitution:devise-a-stratagem'), extraDice,
         runes: runeTags, runeNotes: [...diceNotes, ...runeNotes], material: item && item.material && item.material.type ? item.material : null,
-        persistent, splash: splashBase ? splashBase + splashBonus : 0, range: rec.range || null, mods: s.used, notes, dmgNotes: dm.notes.filter((n) => !n.category && !onlyItem(n)), dmgParts,
+        persistent, splash: splashBase ? splashBase + splashBonus : 0, range: bombRange || rec.range || null, mods: s.used, notes, dmgNotes: dm.notes.filter((n) => !n.category && !onlyItem(n)), dmgParts,
       };
     });
   }

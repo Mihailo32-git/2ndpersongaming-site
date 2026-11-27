@@ -14,16 +14,20 @@ const KNOWN_PACKS = ['feats', 'classfeatures', 'ancestryfeatures', 'heritages', 
 // Feats that let one skill's rank stand in for others when meeting skill feat prerequisites.
 // Versatile Performance: "use your proficiency rank in Performance to meet the prerequisites of skill feats that
 // require a particular proficiency rank in Deception, Diplomacy, or Intimidation".
-const SKILL_STANDINS = [{ feat: 'versatile-performance', from: 'performance', skills: ['deception', 'diplomacy', 'intimidation'] }];
+// any: true counts for every prerequisite, not only skill feats' (Chirurgeon: Crafting for Medicine).
+const SKILL_STANDINS = [
+  { feat: 'versatile-performance', from: 'performance', skills: ['deception', 'diplomacy', 'intimidation'] },
+  { feat: 'chirurgeon', from: 'crafting', skills: ['medicine'], any: true },
+];
+let standinsOff = false; // while checking whether a prerequisite is met without them
 
 function rankOfTarget(target, ch, rec = null) {
   target = target.trim().replace(/\.$/, '');
   if (SKILLS[target] !== undefined) {
     let r = ch.ranks.skills[target] || 0;
-    if (rec && (rec.traits || []).includes('skill')) {
-      const owned = ch.ownedSlugs || new Set((ch.items || []).map((i) => i.rec.slug));
-      for (const x of SKILL_STANDINS) if (x.skills.includes(target) && owned.has(x.feat)) r = Math.max(r, ch.ranks.skills[x.from] || 0);
-    }
+    const owned = ch.ownedSlugs || new Set((ch.items || []).map((i) => i.rec.slug));
+    const skillFeat = !!(rec && (rec.traits || []).includes('skill'));
+    if (!standinsOff) for (const x of SKILL_STANDINS) if ((x.any || skillFeat) && x.skills.includes(target) && owned.has(x.feat)) r = Math.max(r, ch.ranks.skills[x.from] || 0);
     return r;
   }
   if (target === 'perception') return ch.ranks.perception;
@@ -115,10 +119,16 @@ export function checkPrereq(text, ch, db, rec = null) {
 export function checkAll(prereqs, ch, db, rec = null) {
   const results = (prereqs || []).map((p) => ({ text: p, ok: checkPrereq(p, ch, db, rec) }));
   // Say when a stand-in skill is what met it ("master in Intimidation" met by Performance via Versatile Performance).
-  if (rec && (rec.traits || []).includes('skill')) for (const r of results) {
+  const skillFeat = !!(rec && (rec.traits || []).includes('skill'));
+  for (const r of results) {
     if (r.ok !== true) continue;
-    const x = SKILL_STANDINS.find((s) => s.skills.some((k) => r.text.toLowerCase().includes(k)) && (ch.ownedSlugs || new Set()).has(s.feat));
-    if (x && checkPrereq(r.text, ch, db, null) !== true) r.via = `${x.from[0].toUpperCase() + x.from.slice(1)}, via ${(db.list('feats').find((f) => f.slug === x.feat) || {}).name || x.feat}`;
+    const x = SKILL_STANDINS.find((s) => (s.any || skillFeat) && s.skills.some((k) => r.text.toLowerCase().includes(k)) && (ch.ownedSlugs || new Set()).has(s.feat));
+    if (!x) continue;
+    standinsOff = true;
+    let without;
+    try { without = checkPrereq(r.text, ch, db, rec); } finally { standinsOff = false; }
+    const src = db.list('feats').find((f) => f.slug === x.feat) || db.list('classfeatures').find((f) => f.slug === x.feat);
+    if (without !== true) r.via = `${x.from[0].toUpperCase() + x.from.slice(1)}, via ${(src || {}).name || x.feat}`;
   }
   const ok = results.every((r) => r.ok !== false);
   return { ok, unknown: results.some((r) => r.ok === null), results };
