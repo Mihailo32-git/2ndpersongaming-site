@@ -74,7 +74,7 @@ export function traitChips(traits, rarity) {
 }
 
 function metaLines(rec) {
-  const p = rec._pack, rows = [];
+  const p = rec._pack === 'creature-spells' ? 'spells' : rec._pack, rows = [];
   const row = (k, v) => { if (v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length)) rows.push(`<div><b>${esc(k)}</b> ${v}</div>`); };
   if (p === 'feats' || p === 'classfeatures' || p === 'ancestryfeatures') {
     if (rec.prereq?.length) row('Prerequisites', esc(rec.prereq.join('; ')));
@@ -108,7 +108,7 @@ function metaLines(rec) {
 export function headerLine(rec) {
   const lvl = rec.level ?? rec.rank;
   const kind = { feats: 'Feat', classfeatures: 'Feature', ancestryfeatures: 'Feature', spells: (rec.traits || []).includes('cantrip') ? 'Cantrip' : (rec.traits || []).includes('focus') ? 'Focus' : 'Spell',
-    equipment: 'Item', actions: 'Action', conditions: 'Condition', heritages: 'Heritage', backgrounds: 'Background', ancestries: 'Ancestry', classes: 'Class' }[rec._pack] || 'Effect';
+    equipment: 'Item', actions: 'Action', conditions: 'Condition', heritages: 'Heritage', backgrounds: 'Background', ancestries: 'Ancestry', classes: 'Class' }[rec._pack === 'creature-spells' ? 'spells' : rec._pack] || 'Effect';
   return `${kind}${lvl != null && lvl !== '' && rec._pack !== 'conditions' ? ' ' + lvl : ''}`;
 }
 
