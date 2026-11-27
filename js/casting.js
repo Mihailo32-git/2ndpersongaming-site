@@ -73,6 +73,7 @@ export function fitsInnatePick(rec, p) {
   const trads = Array.isArray(p.trad) ? p.trad : p.trad ? [p.trad] : [];
   if (trads.length && !trads.some((t) => (rec.trad || []).includes(t))) return false;
   if (p.common && rec.rarity && rec.rarity !== 'common') return false;
+  if (p.traits && p.traits.length && !p.traits.some((t) => (rec.traits || []).includes(t))) return false;
   if (p.rank === 0) return isCantrip(rec);
   if (isCantrip(rec)) return false;
   return p.orLower ? rec.rank <= p.rank : rec.rank === p.rank;
@@ -307,6 +308,9 @@ export function buildSpellcasting(engine, ch, statMods) {
       for (const [lvl, rank] of ARCH_SLOTS[f.rec.archCasting.tier] || []) if (L >= lvl) slots[rank] = Math.max(slots[rank] || 0, 1);
     }
     const maxRank = Math.max(0, ...Object.keys(slots).map(Number));
+    // Breadth feats (Occult Breadth, Arcane Breadth…): one more slot, and repertoire spell, for each rank but the two highest.
+    const breadth = archFeats.concat(ch.items).some((x) => x.rec.arch === arch && /-breadth$/.test(x.rec.slug));
+    if (breadth) for (const r of Object.keys(slots).map(Number)) if (r <= maxRank - 2) slots[r] += 1;
     const store = (sp.arch || {})[arch] || {};
     const e = {
       id: 'arch:' + arch, arch, label: titleCase(arch.replace(/-/g, ' ')) + ' archetype', source: 'archetype', feat: d.rec,
@@ -315,7 +319,7 @@ export function buildSpellcasting(engine, ch, statMods) {
     if (!trad) e.warnings.push('Tradition depends on a choice in ' + d.rec.name);
     if (type === 'spontaneous') {
       e.repLimits = { 0: e.cantrips };
-      for (const r of Object.keys(slots)) e.repLimits[r] = 1;
+      for (const r of Object.keys(slots)) e.repLimits[r] = slots[r];
       e.repertoire = {};
       for (const r of Object.keys(e.repLimits)) {
         e.repertoire[r] = ((store.rep || {})[r] || []).map(ref).filter(valid);
@@ -415,6 +419,7 @@ export function buildSpellcasting(engine, ch, statMods) {
   if (focus.spells.length && !ch.focusMax) focus.estimated = true;
 
   // ------------------------------------------------------------------ innate spells
+  const extraUsed = new Set(); // spells added by hand that fill an innate pick
   const innStats = () => { const o = stats('cha'); return { attack: o.attack, dc: o.dc, prof: o.rank }; };
   const innateRank = (rec, g, p) => (isCantrip(rec) ? out.cantripRank : (p && p.orLower ? rec.rank : (g.innateRank || rec.rank)));
   // Ancestral Mind (psychic): innate spells from ancestry feats and heritages can use the psychic attribute and
@@ -424,7 +429,7 @@ export function buildSpellcasting(engine, ch, statMods) {
   const pushInnate = (x, it, g, p) => {
     const anc = ancestral(it);
     const st = anc ? (() => { const o = stats(psyAttr); return { attack: o.attack, dc: o.dc, prof: o.rank }; })() : innStats();
-    out.innate.push({ ...x, rank: innateRank(x.rec, g, p), source: it.rec.name + (anc ? ' · Ancestral Mind' : ''), trad: anc ? 'occult' : g.innateTrad || (p && !Array.isArray(p.trad) ? p.trad : null), attr: anc ? psyAttr : 'cha', ...st });
+    out.innate.push({ ...x, rank: innateRank(x.rec, g, p), srcArch: it.rec.arch || null, source: it.rec.name + (anc ? ' · Ancestral Mind' : ''), trad: anc ? 'occult' : g.innateTrad || (p && !Array.isArray(p.trad) ? p.trad : null), attr: anc ? psyAttr : 'cha', ...st });
   };
   for (const it of ch.items) {
     const g = it.rec.spellGrants;
@@ -438,7 +443,13 @@ export function buildSpellcasting(engine, ch, statMods) {
     if (it.rec.archCasting) continue;
     (g.innatePick || []).forEach((p, i) => {
       const key = it.key + '#i' + i;
-      const picked = (sp.pick || {})[key];
+      let picked = (sp.pick || {})[key];
+      // Not picked yet, but a spell added by hand fits it (Pathbuilder imports, and characters made before this pick
+      // existed, have Captivator's cantrips as added spells): it counts as the pick.
+      if (!picked) {
+        const ex = (sp.innateExtra || []).find((e) => e && e.ref && !extraUsed.has(e.ref) && !Object.values(sp.pick || {}).includes(e.ref) && fitsInnatePick(db.get(e.ref), p));
+        if (ex) { picked = ex.ref; extraUsed.add(ex.ref); }
+      }
       const x = picked ? ref(picked) : null;
       const ok = !!(x && valid(x) && fitsInnatePick(x.rec, p));
       out.picks.push({ key, source: it.rec.name, list: p, value: ok ? picked : null, innate: true });
@@ -468,6 +479,7 @@ export function buildSpellcasting(engine, ch, statMods) {
     }
   }
   for (const x of sp.innateExtra || []) {
+    if (extraUsed.has(x.ref)) continue; // counted as a pick above
     const s = ref(x.ref);
     if (valid(s)) out.innate.push({ ...s, rank: x.rank || (isCantrip(s.rec) ? out.cantripRank : s.rec.rank), source: 'Added by you', manual: true, attr: 'cha', ...innStats() });
   }

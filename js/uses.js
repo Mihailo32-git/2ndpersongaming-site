@@ -29,14 +29,35 @@ export function freqText(f) {
 }
 export const RESET_TIERS = [{ tier: 2, label: '10 minutes passed' }, { tier: 3, label: 'An hour passed' }];
 
+// Feats that make something usable more often (the feat text says so; there's no rule to read it from).
+const FREQ_UPGRADES = [
+  { slug: 'accidental-shot', by: 'unbelievable-luck', freq: '1/PT1H' },
+  { slug: 'unexpected-sharpshooter-dedication', by: 'unbelievable-luck', freq: '1/PT1H' },
+  { slug: 'lucky-escape', by: 'unbelievable-escape', freq: '1/PT1H' },
+];
+/** Refs of the character's actions that have a frequency. */
+export const limitedActionRefs = (ch) => new Set((ch.actions || []).filter((a) => a.rec && a.rec.freq).map((a) => `@actions/${a.rec.slug}`));
+/** A feat whose limited use is an action it grants (Unexpected Sharpshooter Dedication → Accidental Shot): counted once, as the action. */
+export const isActionDup = (rec, actionRefs) => rec._pack !== 'actions' && !!rec.freq && (rec.acts || []).some((r) => actionRefs.has(r));
+/** A feat's or action's frequency for this character, after feats that raise it (Unbelievable Luck: once an hour). */
+export function effectiveFreq(rec, ch) {
+  if (!rec) return null;
+  // Medic Dedication: Battle Medicine on a creature that's already immune, once a day (once an hour at master in Medicine).
+  if (rec.slug === 'medic-dedication') return Math.max(ch.ranks?.skills?.medicine || 0, ch.skills?.medicine?.reqRank || 0) >= 3 ? '1/PT1H' : '1/day';
+  if (!rec.freq) return null;
+  const owned = ch.ownedSlugs || new Set((ch.items || []).map((i) => i.rec.slug));
+  const up = FREQ_UPGRADES.find((u) => u.slug === rec.slug && owned.has(u.by));
+  return up ? up.freq : rec.freq;
+}
 /** The character's feats, features and actions that have a frequency: [{slug, name, ref, max, per, tier, used}] */
 export function limitedList(ch, state) {
   const seen = new Set(); const out = [];
+  const actionRefs = limitedActionRefs(ch);
   const add = (rec) => {
-    if (!rec || !rec.freq || seen.has(rec.slug)) return;
-    const fr = parseFreq(rec.freq); if (!fr) return;
+    if (!rec || seen.has(rec.slug) || isActionDup(rec, actionRefs)) return;
+    const fr = parseFreq(effectiveFreq(rec, ch)); if (!fr) return;
     seen.add(rec.slug);
-    out.push({ slug: rec.slug, name: rec.name, ref: rec._pack ? `@${rec._pack}/${rec.slug}` : null, ...fr, used: Math.min(fr.max, (state.freqUsed || {})[rec.slug] || 0) });
+    out.push({ slug: rec.slug, name: rec.slug === 'medic-dedication' ? 'Battle Medicine on an immune creature (Medic)' : rec.name, ref: rec._pack ? `@${rec._pack}/${rec.slug}` : null, ...fr, used: Math.min(fr.max, (state.freqUsed || {})[rec.slug] || 0) });
   };
   for (const f of ch.feats || []) add(f.rec);
   for (const f of ch.features || []) add(f.rec);

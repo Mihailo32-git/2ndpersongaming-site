@@ -12,7 +12,7 @@ import { slotRows, ordinal, spellList, isCantrip, attrLabel } from './casting.js
 import { openSpellPicker, rarityBadge } from './pickers.js';
 import { openDrawer } from './drawer.js';
 import { renderCompanions } from './companion-ui.js';
-import { parseFreq, freqText, limitedList, RESET_TIERS, hasAlchemy, alchemyInfo, isAlchemyCraft, formulaFamily, innateUsedCount } from './uses.js';
+import { parseFreq, freqText, effectiveFreq, isActionDup, limitedActionRefs, limitedList, RESET_TIERS, hasAlchemy, alchemyInfo, isAlchemyCraft, formulaFamily, innateUsedCount } from './uses.js';
 import { portraitSrc, pickImage, makePortrait } from './portrait.js';
 import { loadRunes, runeKind, itemRunes, materialLabel, runeRef } from './runes.js';
 import { openRuneManager } from './runes-ui.js';
@@ -228,6 +228,7 @@ function breakdown(title, base, stat) {
     ${mods.map((x) => `<tr><td>${esc(x.label)} <span class="muted small">${esc(x.type)}</span></td><td class="mod">${signed(x.value)}</td></tr>`).join('')}
     <tr><th>Total</th><th class="mod">${isDC ? stat.total : signed(stat.total)}</th></tr></table>
     ${stat.notes?.length ? `<h4 style="margin-top:12px">Situational</h4><ul>${stat.notes.map((n) => `<li>${signed(n.value)} ${esc(n.type)} from ${esc(n.label)}</li>`).join('')}</ul>` : ''}`;
+  return m;
 }
 // Small line icons for the stat tiles (drawn here, no icon font).
 const ICON_PATHS = {
@@ -391,9 +392,11 @@ function actionGroups() {
   }
   // Special: from class features, feats, archetypes, ancestry and items
   const seen = new Set();
+  const aRefs = limitedActionRefs(ch);
+  const limited = (rec) => !!effectiveFreq(rec, ch) && !isActionDup(rec, aRefs);
   const special = [...ch.actions.map((a) => ({ rec: a.rec, src: a.source || '' })),
-    ...ch.feats.filter((f) => (f.rec.action && f.rec.action !== 'passive') || f.rec.freq).map((f) => ({ rec: f.rec, slot: f.slot, src: f.slot ? `${f.slot.label.replace(/ feat$/, '')} ${f.slot.level}` : f.source || 'Feat' })),
-    ...ch.features.filter((f) => (f.rec.action && f.rec.action !== 'passive') || f.rec.freq).map((f) => ({ rec: f.rec, src: f.source && f.source !== f.rec.name ? f.source : 'Class feature' }))]
+    ...ch.feats.filter((f) => (f.rec.action && f.rec.action !== 'passive') || limited(f.rec)).map((f) => ({ rec: f.rec, slot: f.slot, src: f.slot ? `${f.slot.label.replace(/ feat$/, '')} ${f.slot.level}` : f.source || 'Feat' })),
+    ...ch.features.filter((f) => (f.rec.action && f.rec.action !== 'passive') || limited(f.rec)).map((f) => ({ rec: f.rec, src: f.source && f.source !== f.rec.name ? f.source : 'Class feature' }))]
     .filter((x) => !SKILL_ACTIONS[x.rec.slug] && !['basic', 'exploration', 'downtime'].includes(x.rec.grp) && !seen.has(x.rec.slug) && seen.add(x.rec.slug))
     .map((x) => ({ ...x, head: originOf(x) }));
   return { basic, skill, special };
@@ -402,6 +405,7 @@ function actionGroups() {
 // Under an action's rules text: the Medicine DC table for Treat Wounds and Battle Medicine, and this character's feats,
 // features and items whose rules change the action (their text links to it: Mortal Healing → Treat Wounds).
 const HEAL_DCS = [[15, 1, 0], [20, 2, 10], [30, 3, 30], [40, 4, 50]];
+const MEDIC_BONUS = { 20: 5, 30: 10, 40: 15 }; // Medic Dedication's circumstance bonus to the Hit Points regained
 // Psychics: a psi cantrip's window also shows what the conscious mind changes about it and its Amp, plus the
 // amps from feats that can be used instead (Warp Space, Mental Balm…).
 function psiExtras(ref) {
@@ -421,9 +425,11 @@ function actionExtras(ref) {
   if (ref === '@actions/treat-wounds' || ref === '@feats/battle-medicine') {
     // Chirurgeon: Crafting proficiency counts for the higher DCs.
     const rank = Math.max(ch.ranks.skills.medicine || 0, ch.skills.medicine.reqRank || 0);
+    const medic = ch.ownedSlugs.has('medic-dedication');
     html += `<h4 class="act-x-h">Medicine DCs <span class="muted small">your Medicine ${signed(ch.skills.medicine.total)} (${esc(RANKS[rank].toLowerCase())}${ch.skills.medicine.reqRank > (ch.ranks.skills.medicine || 0) ? ', from Crafting' : ''})</span></h4>
       <table class="stat-table heal-dcs"><tr><th>DC</th><th>Needs</th><th>Success</th><th>Critical success</th></tr>
-      ${HEAL_DCS.map(([dc, need, add]) => `<tr class="${rank >= need ? '' : 'out'}"><td class="mono">${dc}</td><td>${esc(RANKS[need].toLowerCase())}</td><td class="mono">2d8${add ? '+' + add : ''}</td><td class="mono">4d8${add ? '+' + add : ''}</td></tr>`).join('')}</table>
+      ${HEAL_DCS.map(([dc, need, add]) => { const a = add + (medic ? MEDIC_BONUS[dc] || 0 : 0); return `<tr class="${rank >= need ? '' : 'out'}"><td class="mono">${dc}</td><td>${esc(RANKS[need].toLowerCase())}</td><td class="mono">2d8${a ? '+' + a : ''}</td><td class="mono">4d8${a ? '+' + a : ''}</td></tr>`; }).join('')}</table>
+      ${medic ? '<p class="small muted">Includes Medic Dedication: +5 HP at DC 20, +10 at DC 30, +15 at DC 40.</p>' : ''}
       <p class="small muted">${ref === '@actions/treat-wounds' ? 'Hit Points regained. Keep treating for a full hour to double them. ' : 'Hit Points restored. '}Critical failure: the target takes 1d8 damage.</p>`;
   }
   const own = new Map();
@@ -469,7 +475,7 @@ TAB_RENDER.actions = (el) => {
       return x.attack ? `<span class="act-roll mono" title="Multiple attack penalty">${signed(x.total)} <i>${signed(x.total - 5)}</i> <i>${signed(x.total - 10)}</i></span>` : `<span class="act-roll mono">${signed(x.total)}</span>`;
     }
     if (x.rolls && x.rolls.length) return `<span class="act-roll">${x.rolls.map((r) => `${esc(r.label)} <b class="mono">${signed(r.total)}</b>`).join(' · ')}</span>`;
-    if (x.src) return `<span class="src">${esc(x.src)}${x.rec.freq ? ' · ' + esc(freqText(x.rec.freq)) : ''}</span>`;
+    if (x.src) return `<span class="src">${esc(x.src)}${effectiveFreq(x.rec, ch) && !isActionDup(x.rec, limitedActionRefs(ch)) ? ' · ' + esc(freqText(effectiveFreq(x.rec, ch))) : ''}</span>`;
     return '';
   };
   const favBtn = (x) => { const r = refOf(x.rec), on = state.favActions.includes(r); return readOnly && !on ? '' : `<button type="button" class="act-fav ${on ? 'on' : ''}" data-afav="${esc(r)}" aria-pressed="${on}" aria-label="${on ? 'Remove ' + esc(x.rec.name) + ' from favorites' : 'Add ' + esc(x.rec.name) + ' to favorites'}" ${readOnly ? 'disabled' : ''}>${on ? '★' : '☆'}</button>`; };
@@ -478,7 +484,7 @@ TAB_RENDER.actions = (el) => {
     <span class="name">${esc(x.rec.name)}${x.trainedOnly ? ' <span class="badge">Trained</span>' : ''}${modeOf(x.rec) !== 'encounter' && !/^(Exploration|Downtime) activities$/.test(x.head || '') ? ` <span class="badge mode">${esc(titleCase(modeOf(x.rec)))}</span>` : ''}</span>${right(x)}${usesPips(x.rec)}</div>`;
   // Limited uses: one pip per use; tap to mark one used (tap again when all are used to clear them).
   function usesPips(rec) {
-    const fr = rec.freq && parseFreq(rec.freq);
+    const fr = !isActionDup(rec, limitedActionRefs(ch)) && parseFreq(effectiveFreq(rec, ch));
     if (!fr) return '';
     const used = Math.min(fr.max, state.freqUsed[rec.slug] || 0);
     return `<button type="button" class="uses ${used >= fr.max ? 'spent' : ''}" data-uses="${esc(rec.slug)}" data-max="${fr.max}" ${readOnly ? 'disabled' : ''} aria-label="${esc(rec.name)}: ${used} of ${fr.max} used (${esc(freqText(fr))})" title="${esc(freqText(fr))}">${Array.from({ length: fr.max }, (_, i) => `<i class="${i < used ? 'on' : ''}"></i>`).join('')}<span>${used >= fr.max ? 'used' : fr.max - used + ' left'}</span></button>`;
@@ -718,7 +724,7 @@ TAB_RENDER.spells = (el) => {
   const groups = new Map();
   for (const s of sc.innate) {
     const feat = s.pickFor?.feat ? db.get('@feats/' + s.pickFor.feat) : null;
-    const key = feat?.arch || 'innate';
+    const key = feat?.arch || s.srcArch || 'innate'; // Captivator Dedication's cantrips go on the Captivator tab too
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(s);
   }
@@ -1197,6 +1203,10 @@ function alchemyLines(vialStrike) {
     other.push('<b>Toxicologist:</b> Activate an injury poison as one action when applying it to a weapon you hold. Your infused poisons hit creatures immune to poison, as acid.');
     if (has('greater-field-discovery-toxicologist')) other.push('<b>Greater Field Discovery:</b> a failed initial save against your infused injury poison sprays it onto an adjacent creature.');
   }
+  // Powerful Alchemy (alchemists) or Alchemical Power (Alchemist Dedication): infused items can use the alchemist class DC.
+  const alchDC = has('powerful-alchemy') && ch.class?.slug === 'alchemist' ? ch.classDC
+    : has('alchemical-power') ? (ch.otherClassDCs || []).find((o) => o.slug === 'alchemist') : null;
+  if (alchDC) other.push(`<b>${has('powerful-alchemy') ? 'Powerful Alchemy' : 'Alchemical Power'}:</b> infused items you make that allow a saving throw can use your class DC <b>${alchDC.total}</b>.`);
   if (has('abundant-vials')) other.push('<b>Abundant Vials:</b> you’re quickened; the extra action can only be Quick Alchemy to make one quick vial.');
   if (has('extend-elixir')) other.push(`<b>Extend Elixir:</b> your infused elixirs of 1 minute or more last twice as long on you${has('eternal-elixir') ? `; Eternal Elixir makes one of level ${Math.floor(L / 2)} or lower last indefinitely` : ''}.`);
   const quickN = has('alchemical-alacrity') ? 3 : has('double-brew') ? 2 : 1;
@@ -1239,12 +1249,12 @@ TAB_RENDER.alchemy = (el) => {
     <section class="alch-col">
       ${info.preps.map((p) => `<div class="alch-card">
         <div class="row between"><h3 class="sub-head">${esc(p.label)}</h3><span class="small"><b>${p.left}</b> of ${p.max} left</span></div>
-        <p class="small muted alch-note">Up to ${p.max} items from your formulas, made each morning. Rest makes the same picks ready again.${ch.ownedSlugs.has('powerful-alchemy') && ch.classDC ? ` Infused items that allow a save can use your class DC <b>${ch.classDC.total}</b> (Powerful Alchemy).` : ''}</p>
+        <p class="small muted alch-note">Up to ${p.max} items from your formulas, made each morning. Rest makes the same picks ready again.</p>
         <div class="pslots">${p.slots.map((x, i) => { const r = x && db.get(x.ref); return r
           ? `<div class="pslot ${x.used ? 'used' : ''}"><button type="button" class="alch-name" data-show="${esc(x.ref)}">${esc(r.name)}</button><span class="muted small">Lv ${r.level}</span>${readOnly ? '' : `<button type="button" class="btn small ${x.used ? '' : 'primary'}" data-puse="${i}" data-ps="${esc(p.slug)}">${x.used ? 'Undo' : 'Use'}</button><button type="button" class="icon-btn" data-pedit="${i}" data-ps="${esc(p.slug)}" aria-label="Change ${esc(r.name)}">✎</button>`}</div>`
           : `<button type="button" class="pslot empty" data-pfill="${i}" data-ps="${esc(p.slug)}" ${readOnly ? 'disabled' : ''}>+ Choose an item</button>`; }).join('')}</div>
         ${readOnly ? '' : `<div class="row alch-btns">${p.filled < p.max ? `<button type="button" class="btn primary" data-pfill="-1" data-ps="${esc(p.slug)}">Fill ${p.max - p.filled} empty slot${p.max - p.filled > 1 ? 's' : ''}</button>` : ''}${p.filled ? `<button type="button" class="btn ghost small" data-pclear="${esc(p.slug)}">Clear all</button>` : ''}</div>`}
-      </div>`).join('') || `<div class="alch-card"><h3 class="sub-head">Daily preparations</h3><p class="muted small">Advanced Alchemy comes with the alchemist class. Until then, make items with Quick Alchemy.</p></div>`}
+      </div>`).join('') || `<div class="alch-card"><h3 class="sub-head">Daily preparations</h3><p class="muted small">Advanced Alchemy comes with the alchemist class, or the Advanced Alchemy archetype feat. Until then, make items with Quick Alchemy.</p></div>`}
     </section></div>`;
   if (readOnly) return;
   const al = state.alchemy;
@@ -1366,7 +1376,13 @@ function wire() {
     const k = p.dataset.bd;
     const base = (st) => st.total - (st.mods || []).reduce((a, m) => a + m.value, 0);
     if (k === 'ac' || k === 'perception') statModal(k);
-    else if (k === 'classdc') breakdown('Class DC', { label: `10 + ${ATTR_NAMES[ch.classDC.attr]} + ${RANKS[ch.classDC.rank].toLowerCase()}`, value: ch.classDC.total }, { total: ch.classDC.total, mods: [] });
+    else if (k === 'classdc') {
+      const bm = breakdown('Class DC', { label: `10 + ${ATTR_NAMES[ch.classDC.attr]} + ${RANKS[ch.classDC.rank].toLowerCase()}`, value: ch.classDC.total }, { total: ch.classDC.total, mods: [] });
+      // Archetypes' class DCs (Fighter Dedication, Rogue Dedication…).
+      const others = ch.otherClassDCs || [];
+      const mb = bm && bm.body;
+      if (others.length && mb) mb.insertAdjacentHTML('beforeend', `<h4 style="margin-top:14px">From archetypes</h4><table class="stat-table">${others.map((o) => `<tr><td>${esc(o.name)} class DC <span class="muted small">${esc(ATTR_NAMES[o.attr])} + ${esc(RANKS[o.rank].toLowerCase())}</span></td><td class="mod">${o.total}</td></tr>`).join('')}</table>`);
+    }
     else if (k === 'spelldc' || k === 'spellatk') {
       const e = mainEntry();
       const m = modal(e.label);

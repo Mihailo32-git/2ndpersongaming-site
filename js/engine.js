@@ -612,6 +612,8 @@ export class Engine {
       m = path.match(/^actor\.(?:system\.)?attributes\.(\w+)\.mod$/);
       if (m) return ch.attrs?.[m[1]] ?? 0;
       if (path === 'item.level') return inst?.rec?.level ?? 0;
+      // Feats taken more than once (Voluminous Vials: 4 + times taken).
+      if (path === 'item.timesTaken') return Math.max(1, (ch.items || []).filter((i) => i.pack === inst?.pack && i.rec.slug === inst?.rec?.slug).length);
       // Proficiency ranks and feat flags (Alchemical Discoveries: "@actor.system.skills.crafting.rank - 1").
       const R = ch.ranks;
       if (R) {
@@ -661,7 +663,7 @@ export class Engine {
       attacks: { simple: cls?.attacks.simple || 0, martial: cls?.attacks.martial || 0, advanced: cls?.attacks.advanced || 0, unarmed: cls?.attacks.unarmed || 0 },
       defenses: { unarmored: cls?.defenses.unarmored || 0, light: cls?.defenses.light || 0, medium: cls?.defenses.medium || 0, heavy: cls?.defenses.heavy || 0 },
       spellcasting: cls?.spellcasting || 0,
-      classDC: cls ? 1 : 0,
+      classDC: cls ? 1 : 0, otherDCs: {},
     };
     ch.ranks = R;
     ch.skillSources = {};
@@ -756,6 +758,7 @@ export class Engine {
 
     // Class features / feats: subfeatures.proficiencies
     const classSlug = cls?.slug;
+    const classSet = new Set(this.db.list('classes').map((c) => c.slug));
     for (const u of ch.profUps) {
       const k = u.target, rank = u.rank;
       if (k in R.saves) R.saves[k] = Math.max(R.saves[k], rank);
@@ -764,6 +767,13 @@ export class Engine {
       else if (k in R.attacks) R.attacks[k] = Math.max(R.attacks[k], rank);
       else if (k === 'spellcasting') R.spellcasting = Math.max(R.spellcasting, rank);
       else if (k === classSlug) R.classDC = Math.max(R.classDC, rank);
+      else if (classSet.has(k)) {
+        // An archetype's class DC (Fighter Dedication: trained in fighter class DC).
+        const o = (R.otherDCs[k] = R.otherDCs[k] || { rank: 0, attr: null });
+        o.rank = Math.max(o.rank, rank);
+        const a = (u.inst.rec.sub?.proficiencies?.[k] || {}).attribute;
+        if (a) o.attr = a;
+      }
     }
     // Remaining ActiveEffectLike rules
     ch.focusMax = 0;
@@ -793,6 +803,10 @@ export class Engine {
       else if ((m = path.match(/^system\.proficiencies\.attacks\.([\w-]+)\.rank$/))) R.attacks[m[1]] = up(R.attacks[m[1]] || 0);
       else if (path === 'system.proficiencies.spellcasting.rank') R.spellcasting = up(R.spellcasting);
       else if ((m = path.match(/^system\.proficiencies\.classDCs\.([\w-]+)\.rank$/)) && m[1] === classSlug) R.classDC = up(R.classDC);
+      else if ((m = path.match(/^system\.proficiencies\.classDCs\.([\w-]+)\.attribute$/)) && m[1] !== classSlug) {
+        const v = this._subst(val, ch, inst);
+        if (typeof v === 'string' && ATTRS.includes(v)) (R.otherDCs[m[1]] = R.otherDCs[m[1]] || { rank: 0, attr: null }).attr = v;
+      }
       else if (path === 'system.resources.focus.max') ch.focusMax = up(ch.focusMax);
       else if (path === 'system.attributes.familiarAbilities.value') ch.familiarAbilities = up(ch.familiarAbilities);
       else if ((m = path.match(/^system\.resources\.(\w+)\.max$/))) resMods.push({ key: m[1], up });
@@ -802,7 +816,9 @@ export class Engine {
       else if (path === 'system.details.ancestry.countsAs' && r.mode === 'add') { const v = this._subst(val, ch, inst); if (typeof v === 'string' && !v.includes('{')) ch.ancestryTraits.add(v); }
       else if ((m = path.match(/^flags\.system\.(.+)$/))) {
         const v = typeof val === 'string' && /[@(]|^\d/.test(val) ? num() : this._subst(val, ch, inst);
-        ch.flags[m[1]] = r.mode === 'upgrade' && typeof v === 'number' ? Math.max(ch.flags[m[1]] ?? -Infinity, v) : v;
+        // Counters add up (Fighter Resiliency: one for each fighter archetype feat).
+        ch.flags[m[1]] = r.mode === 'upgrade' && typeof v === 'number' ? Math.max(ch.flags[m[1]] ?? -Infinity, v)
+          : r.mode === 'add' && typeof v === 'number' ? (Number(ch.flags[m[1]]) || 0) + v : v;
       }
     }
     ch.focusMax = Math.max(0, Math.min(3, ch.focusMax));
@@ -1032,6 +1048,15 @@ export class Engine {
       const s = stackMods(mods);
       ch.classDC = { total: 10 + A[ka] + rankBonus(R.classDC, L) + s.total, rank: R.classDC, attr: ka };
     }
+    // Archetypes' class DCs (fighter, rogue, alchemist…): the attribute the dedication names, else the class's key one.
+    ch.otherClassDCs = Object.entries(R.otherDCs || {}).filter(([k, o]) => o.rank > 0 && k !== ch.class?.slug).map(([k, o]) => {
+      const crec = this.db.list('classes').find((c) => c.slug === k);
+      const keys = [].concat(crec?.keyAttr || crec?.keyAbility || []).filter((a) => ATTRS.includes(a));
+      const attr = o.attr || (keys.length ? keys.reduce((b, a) => (A[a] > A[b] ? a : b)) : 'str');
+      const { mods } = statMods('class', attr, [k, 'class-dc']);
+      const st = stackMods(mods);
+      return { slug: k, name: crec?.name || titleCase(k), rank: o.rank, attr, total: 10 + A[attr] + rankBonus(o.rank, L) + st.total };
+    });
     // Speed
     {
       const { mods, notes } = statMods('land-speed', null, ['speed', 'all-speeds']);
@@ -1306,6 +1331,16 @@ export class Engine {
       let dieUp = 0, dieSet = null;
       {
         const dOpts = new Set([...ch.options, ...(ch.stateOptions || []), ...wOpts]);
+        // Sneak Attack works with agile or finesse melee Strikes and ranged ones.
+        if (ranged || traits.includes('agile') || traits.includes('finesse')) dOpts.add('item:tag:sneak-attack');
+        const against = (t) => {
+          const w = t.map((x) => { let m;
+            if ((m = x.match(/^target:condition:([\w-]+)$/))) return `${m[1]} targets`;
+            if (/^target:mark:hunt-prey$/.test(x)) return 'your hunted prey';
+            if ((m = x.match(/^target:trait:([\w-]+)$/))) return `${m[1]} creatures`;
+            return null; });
+          return w.every(Boolean) ? w.join(' and ') : 'some targets';
+        };
         for (const { r: r0, inst } of ch.rules) {
           let r = r0;
           if (r.key !== 'DamageDice' || r.brackets) continue;
@@ -1314,7 +1349,12 @@ export class Engine {
           const own = dsel.some((x) => /\{item\|/.test(x));
           if (own && rec.srcSlug !== inst.rec.slug) continue;
           const pred = this._subst(r.predicate || [], ch, inst);
-          if (/\{(item|actor)\|/.test(JSON.stringify(pred)) || (pred.length && !test(pred, dOpts))) continue;
+          if (/\{(item|actor)\|/.test(JSON.stringify(pred))) continue;
+          // Dice that depend on the target (Sneak Attack against off-guard targets) are shown as a note.
+          const tgt = Array.isArray(pred) ? pred.filter((x) => typeof x === 'string' && /^target:/.test(x)) : [];
+          const rest = tgt.length ? pred.filter((x) => !tgt.includes(x)) : pred;
+          if (rest.length && !test(rest, dOpts)) continue;
+          if (tgt.length && (r.override || r.critical === true)) continue;
           // A bigger die for an item's own Strikes (Animal instinct at 7th: d10 → d12). Other overrides are left out.
           if (r.override) {
             if (own && r.override.upgrade) dieUp++;
@@ -1322,11 +1362,12 @@ export class Engine {
             continue;
           }
           const n = Number(this._value(ch, inst, r.diceNumber ?? 1)) || 0;
-          const dieSize = r.dieSize || (r.critical === true ? (rec.damage?.die || '') : '');
+          const dieSize = (r.dieSize ? String(this._subst(r.dieSize, ch, inst)) : '') || (r.critical === true ? (rec.damage?.die || '') : '');
           if (n <= 0 || !/^d\d+$/.test(dieSize)) continue;
           r = { ...r, dieSize };
           const what = `${n}${r.dieSize} ${r.damageType || (r.category === 'precision' ? 'precision' : rec.damage?.type || '')}`.trim();
-          if (r.critical === true) diceNotes.push({ label: inst.rec.name, text: `Critical hit: also ${what}.`, crit: true });
+          if (tgt.length) diceNotes.push({ label: inst.rec.name, text: `+${what} against ${against(tgt)}.` });
+          else if (r.critical === true) diceNotes.push({ label: inst.rec.name, text: `Critical hit: also ${what}.`, crit: true });
           else extraDice.push({ text: ` + ${what}`, source: inst.rec.name });
         }
         // Notes for stratagem Strikes (Certain Stratagem: on a miss, half your strategic strike damage).
@@ -1414,6 +1455,7 @@ export class Engine {
       if (item && item.oversized) runeNotes.push({ label: 'Large weapon', text: 'You\u2019re clumsy 1 while wielding it (Titan Mauler).' });
       // Far Lobber: alchemical bombs (versatile vials too) have a 30-foot range increment; Uncanny Bombs: 60 feet,
       // less cover and no flat check against concealed targets.
+      if (ranged && feats.has('no-hard-feelings') && !traits.includes('nonlethal')) runeNotes.push({ label: 'No Hard Feelings', text: 'You can make this Strike nonlethal (choose before each Strike).' });
       let bombRange = null;
       if (isAlchBomb && feats.has('uncanny-bombs')) {
         bombRange = 60;
