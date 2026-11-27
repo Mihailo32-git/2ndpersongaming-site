@@ -94,6 +94,19 @@ function sameValue(a, b) {
   return a === b || JSON.stringify(a) === JSON.stringify(b);
 }
 
+// Skill feats tied only to Strength- or Dexterity-based skills (from their prerequisites) don't fit Skillful Lessons.
+// Feats with no skill prerequisite (Assurance, Additional Lore…) are allowed.
+const PHYSICAL_SKILLS = ['acrobatics', 'athletics', 'stealth', 'thievery'];
+function mentalSkillFeat(rec) {
+  const skills = [];
+  for (const p of rec.prereq || []) {
+    const re = /\b(?:trained|expert|master|legendary) in ([a-z]+(?: lore)?)/gi;
+    let m;
+    while ((m = re.exec(p))) skills.push(m[1].toLowerCase());
+  }
+  return !skills.length || skills.some((k) => !PHYSICAL_SKILLS.includes(k));
+}
+
 export class Engine {
   constructor(db) { this.db = db; }
 
@@ -117,7 +130,11 @@ export class Engine {
       if (build.options?.ancestryParagon && [1, 3, 7, 11, 15, 19].includes(l)) slots.push({ id: 'paragon-' + l, type: 'ancestry', level: l, label: 'Ancestry feat (paragon)' });
       if (cls.classFeatLevels.includes(l)) slots.push({ id: 'class-' + l, type: 'class', level: l, label: 'Class feat' });
       if (build.options?.freeArchetype && l % 2 === 0) slots.push({ id: 'archetype-' + l, type: 'archetype', level: l, label: 'Archetype feat' });
-      if (cls.skillFeatLevels.includes(l)) slots.push({ id: 'skill-' + l, type: 'skill', level: l, label: 'Skill feat' });
+      if (cls.skillFeatLevels.includes(l)) {
+        // Investigator's Skillful Lessons (odd levels from 3rd): a feat for an Intelligence-, Wisdom- or Charisma-based skill.
+        const lessons = cls.slug === 'investigator' && l >= 3 && l % 2 === 1;
+        slots.push({ id: 'skill-' + l, type: 'skill', level: l, label: lessons ? 'Skill feat (Skillful Lessons)' : 'Skill feat', ...(lessons ? { mentalSkill: true } : {}) });
+      }
       if (cls.generalFeatLevels.includes(l)) slots.push({ id: 'general-' + l, type: 'general', level: l, label: 'General feat' });
     }
     return slots;
@@ -148,6 +165,7 @@ export class Engine {
       if (already >= max) reasons.push('Already taken');
       if (rec.onlyL1 && slot.level > 1) reasons.push('Only at 1st level');
       if ((rec.traits || []).includes('dedication') && dedicationBlock) reasons.push(dedicationBlock);
+      if (slot.mentalSkill && !mentalSkillFeat(rec)) reasons.push('Skillful Lessons: needs an Int, Wis or Cha skill');
       out.push({ rec, pre, ok: reasons.length === 0, reasons });
     }
     // Class slots: your class feats first, then archetype feats. Archetype slots: grouped by archetype, dedication first.
@@ -343,6 +361,7 @@ export class Engine {
           if (/^(system\.details\.class\.trait|class\.slug)$/.test(path)) return ch.class?.slug || '';
           if (/^(system\.details\.ancestry\.trait|ancestry\.slug)$/.test(path)) return ch.ancestry?.slug || '';
           if (path === 'level' || path === 'system.details.level.value') return String(ch.level);
+          if (path === 'halfLevel') return String(Math.floor(ch.level / 2));
           // Adopted Ancestry / versatile heritages (Aiuvarin counts as elf): known from this pass or the one before.
           const dm = path.match(/^system\.details\.ancestry\.(adopted|versatile)$/);
           if (dm) {
@@ -580,6 +599,21 @@ export class Engine {
       m = path.match(/^actor\.(?:system\.)?attributes\.(\w+)\.mod$/);
       if (m) return ch.attrs?.[m[1]] ?? 0;
       if (path === 'item.level') return inst?.rec?.level ?? 0;
+      // Proficiency ranks and feat flags (Alchemical Discoveries: "@actor.system.skills.crafting.rank - 1").
+      const R = ch.ranks;
+      if (R) {
+        m = path.match(/^actor\.(?:system\.)?skills\.([\w-]+)\.rank$/);
+        if (m) return R.skills?.[m[1]] ?? R.lores?.[m[1]] ?? 0;
+        m = path.match(/^actor\.system\.proficiencies\.(attacks|defenses)\.([\w-]+?)(?:\.rank)?$/);
+        if (m) return R[m[1]]?.[m[2]] ?? 0;
+        if (path === 'actor.system.proficiencies.spellcasting.rank') return R.spellcasting || 0;
+        if (path === 'actor.system.perception.rank') return R.perception || 0;
+        m = path.match(/^actor\.system\.saves\.(\w+)\.rank$/);
+        if (m) return R.saves?.[m[1]] ?? 0;
+      }
+      m = path.match(/^actor\.flags\.system\.(.+)$/);
+      if (m && ch.flags && typeof ch.flags[m[1]] === 'number') return ch.flags[m[1]];
+      if (ch.speed && path === 'actor.system.movement.speeds.land.value') return ch.speed.total;
       const w = this._weaponCtx;
       if (w) {
         if (path === 'weapon.level' || path === 'weapon.system.level.value') return w.level;
@@ -788,6 +822,7 @@ export class Engine {
     if (extraOptions) for (const o of extraOptions) opts.add(o);
     for (const { r, inst } of [...ch.rules, ...(ch.effectRules || [])]) {
       if (r.key !== 'FlatModifier') continue;
+      if (r.type === 'ability') continue; // "use Intelligence instead" (Devise a Stratagem): strikes swap the attribute
       if (skipSlugs && r.slug && skipSlugs.includes(r.slug)) continue;
       let sel = this._subst(r.selector, ch, inst);
       sel = Array.isArray(sel) ? sel : [sel];
@@ -839,6 +874,7 @@ export class Engine {
       const on = subs.length ? (subs.some((x) => x.value === v) ? v : null) : (v == null ? !!r.value : !!v);
       ch.toggles.push({ option: r.option, label, source: inst.rec.name, subs, on });
       if (on) { ch.stateOptions.push(r.option); if (typeof on === 'string') ch.stateOptions.push(`${r.option}:${on}`); }
+      if (on && r.option === 'target:mark:devise-a-stratagem') ch.stateOptions.push('devise-a-stratagem:attack');
     }
     ch.effectRules = [];
     for (const e of state.effects || []) {
@@ -1114,13 +1150,29 @@ export class Engine {
       const ranged = !!rec.range && !traits.some((t) => t.startsWith('thrown')) || traits.includes('bomb');
       const thrown = traits.some((t) => t.startsWith('thrown')) || traits.includes('bomb');
       const finesse = traits.includes('finesse');
-      const attr = ranged ? 'dex' : (finesse && A.dex > A.str ? 'dex' : 'str');
+      let attr = ranged ? 'dex' : (finesse && A.dex > A.str ? 'dex' : 'str');
       const rank = Math.max(R.attacks[rec.cat] || 0, rec.base ? (R.attacks['weapon-base-' + rec.base] || 0) : 0, rec.group ? (R.attacks['weapon-group-' + rec.group] || 0) : 0, familiarRank(rec));
       const potency = item ? (item.potency ?? rec.runes?.potency ?? 0) : 0;
       const striking = item ? (item.striking ?? rec.runes?.striking ?? 0) : 0;
-      const wOpts = itemOptions({ ...rec, cat: rec.cat }, 'equipment');
+      const wOpts = new Set(itemOptions({ ...rec, cat: rec.cat }, 'equipment'));
       wOpts.add(ranged ? 'item:ranged' : 'item:melee');
       if (thrown) wOpts.add('item:thrown');
+      if (rec.usage) wOpts.add('item:hands-held:' + (/two-hands/.test(rec.usage) ? 2 : 1));
+      if (rec.damage?.type) wOpts.add('item:damage:type:' + rec.damage.type);
+      // "Use your Intelligence modifier instead" (Devise a Stratagem with an agile, finesse or ranged weapon; Takedown
+      // Expert with a club): the higher attribute is used. A Strike that adds Int this way counts as a stratagem Strike
+      // (strategic strike damage, Scalpel's Point, Certain Stratagem…).
+      {
+        const aOpts = new Set([...ch.options, ...(ch.stateOptions || []), ...wOpts]);
+        const aSel = ['strike-attack-roll', 'attack', 'attack-roll', rec.slug + '-attack', rec.group ? rec.group + '-group-attack-roll' : null];
+        for (const { r, inst } of ch.rules) {
+          if (r.key !== 'FlatModifier' || r.type !== 'ability' || !ATTRS.includes(r.ability)) continue;
+          if (![].concat(this._subst(r.selector, ch, inst) || []).some((x) => aSel.includes(x))) continue;
+          if (r.predicate && !test(this._subst(r.predicate, ch, inst), aOpts)) continue;
+          if (A[r.ability] > A[attr]) attr = r.ability;
+          if (attr === r.ability && JSON.stringify(r.predicate || []).includes('devise-a-stratagem')) wOpts.add('check:substitution:devise-a-stratagem');
+        }
+      }
       this._weaponCtx = { level: rec.level || 0, dice: rec.damage?.dice || 1, potency, splash: rec.splash || 0 };
       const am = this._mods(ch, ['attack', 'attack-roll', 'strike-attack-roll', rec.slug + '-attack', attr + '-based'], state, wOpts);
       const mods = [...am.mods, ...this._conditionMods(state.conditions || [])('attack', attr)];
@@ -1145,6 +1197,34 @@ export class Engine {
       if (rec.base) dSel.push(rec.base + '-base-type-damage');
       if (isAlchBomb) dSel.push('alchemical-bomb-damage');
       const dm = this._mods(ch, dSel, state, wOpts, ['rage']);
+      // Extra damage dice (Strategic Strike: +3d6 precision while Devising a Stratagem). Only ones whose conditions
+      // are all known here; ones that depend on the target (sneak attack) stay out, as before.
+      const extraDice = [], diceNotes = [];
+      {
+        const dOpts = new Set([...ch.options, ...(ch.stateOptions || []), ...wOpts]);
+        for (const { r, inst } of ch.rules) {
+          if (r.key !== 'DamageDice' || r.override || r.brackets) continue;
+          if (![].concat(this._subst(r.selector, ch, inst) || [], r.selectors || []).some((x) => dSel.includes(x))) continue;
+          const pred = this._subst(r.predicate || [], ch, inst);
+          if (/\{(item|actor)\|/.test(JSON.stringify(pred)) || (pred.length && !test(pred, dOpts))) continue;
+          const n = Number(this._value(ch, inst, r.diceNumber ?? 1)) || 0;
+          if (n <= 0 || !/^d\d+$/.test(r.dieSize || '')) continue;
+          const what = `${n}${r.dieSize} ${r.damageType || (r.category === 'precision' ? 'precision' : rec.damage?.type || '')}`.trim();
+          if (r.critical === true) diceNotes.push({ label: inst.rec.name, text: `Critical hit: also ${what}.`, crit: true });
+          else extraDice.push({ text: ` + ${what}`, source: inst.rec.name });
+        }
+        // Notes for stratagem Strikes (Certain Stratagem: on a miss, half your strategic strike damage).
+        const OUT = { success: 'Hit', criticalSuccess: 'Critical hit', failure: 'Miss', criticalFailure: 'Critical miss' };
+        for (const { r, inst } of ch.rules) {
+          if (r.key !== 'Note' || !['strike-attack-roll', 'strike-damage'].includes(r.selector)) continue;
+          // Certain Stratagem is for Strikes that add your Intelligence modifier; the others for any substituted Strike.
+          if (inst.rec.slug === 'certain-stratagem' && !wOpts.has('check:substitution:devise-a-stratagem')) continue;
+          if (r.predicate && r.predicate.length && !test(this._subst(r.predicate, ch, inst), dOpts)) continue;
+          const o = (r.outcome || []).map((x) => OUT[x]).filter(Boolean);
+          const head = o.includes('Hit') ? 'Hit' : o.includes('Miss') ? 'Miss' : o.join(' or ');
+          diceNotes.push({ label: inst.rec.name, text: (head ? head + ': ' : '') + r.text, crit: o.length === 1 && o[0] === 'Critical hit' });
+        }
+      }
       this._weaponCtx = null;
       const dmgType = rec.damage?.type || '';
       // Persistent and splash bonuses (Burn It!: +1 persistent fire) don't add to the hit itself.
@@ -1221,8 +1301,9 @@ export class Engine {
         name: rec.name, rec, item, source, attack, rank, attr, traits, ranged,
         map: agile ? [attack - 4, attack - 8] : [attack - 5, attack - 10],
         damage: `${die ? `${dice}${die}${dmgMod ? (dmgMod > 0 ? '+' : '') + dmgMod : ''}` : Math.max(1, dice + dmgMod)} ${dmgType}`.trim()
-          + Object.entries(extras).map(([t, v]) => ` + ${v} ${t}`).join('') + runeDice.join(''),
-        runes: runeTags, runeNotes, material: item && item.material && item.material.type ? item.material : null,
+          + Object.entries(extras).map(([t, v]) => ` + ${v} ${t}`).join('') + runeDice.join('') + extraDice.map((x) => x.text).join(''),
+        stratagem: wOpts.has('check:substitution:devise-a-stratagem'), extraDice,
+        runes: runeTags, runeNotes: [...diceNotes, ...runeNotes], material: item && item.material && item.material.type ? item.material : null,
         persistent, splash: splashBase ? splashBase + splashBonus : 0, range: rec.range || null, mods: s.used, notes, dmgNotes: dm.notes.filter((n) => !n.category && !onlyItem(n)), dmgParts,
       };
     });
