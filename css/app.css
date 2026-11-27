@@ -1496,3 +1496,5 @@ html[data-theme="light"] .badge.rune-badge { color: #6d28d9; background: rgba(12
 html:not([data-gm]) .nav a[href="gm.html"] { display: none; }
 /* The narrowest phones show just "2nd Person", so the name and the menu still share the top bar's first row. */
 @media (max-width: 420px) { .brand-x { display: none; } }
+/* Slim footer: the full Paizo / ORC notices live on the Licenses page */
+.footer.footer-min, html[data-skin] .footer.footer-min { padding: 10px 24px 24px; text-align: center; border-top: 0; background: none; box-shadow: none; }
