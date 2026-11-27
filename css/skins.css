@@ -1,5 +1,5 @@
 /* Fantasy skins (preview). Same layout as the default theme: only colours, fonts, frames and backgrounds change.
-   html[data-skin=tome|grove|cosmos]; tome also sets data-theme=light, the others data-theme=dark.
+   html[data-skin=tome|grove|cosmos|alchemy|steel|frost]; tome and frost also set data-theme=light, the others data-theme=dark.
    Fonts are self-hosted (fonts/, SIL Open Font License). Numbers keep the default fonts so they stay easy to read. */
 @font-face { font-family: 'Cinzel'; font-style: normal; font-display: swap; font-weight: 400 900; src: url(../fonts/cinzel-latin-wght-normal.woff2) format('woff2'); }
 @font-face { font-family: 'EB Garamond'; font-style: normal; font-display: swap; font-weight: 400 800; src: url(../fonts/eb-garamond-latin-wght-normal.woff2) format('woff2'); }
@@ -152,3 +152,135 @@ html[data-skin="cosmos"] h1, html[data-skin="cosmos"] .sc-head h3, html[data-ski
 html[data-skin="cosmos"] .sc-head h3::before, html[data-skin="cosmos"] .sub-head::before { content: '✦ '; }
 html[data-skin="cosmos"] .card, html[data-skin="cosmos"] .hero-card, html[data-skin="cosmos"] .sidepanel, html[data-skin="cosmos"] .sheet-cols > .col-main {
   box-shadow: inset 0 0 0 3px var(--frame-gap), inset 0 0 0 4px var(--frame-inner), 0 0 24px rgba(130, 90, 255, .12), var(--shadow); }
+
+/* A heading mark drawn as a picture, so it looks the same on every device (no emoji). */
+html[data-skin="alchemy"] .sc-head h3::before, html[data-skin="alchemy"] .sub-head::before,
+html[data-skin="steel"] .sc-head h3::before, html[data-skin="steel"] .sub-head::before,
+html[data-skin="frost"] .sc-head h3::before, html[data-skin="frost"] .sub-head::before {
+  content: ''; display: inline-block; width: .95em; height: .95em; margin-right: .45em; vertical-align: -.1em; background: var(--mark) center / contain no-repeat; }
+
+/* ------------------------------------------------------------ Alchemy: a laboratory — glassware, graph paper, molecules, medicine */
+html[data-skin="alchemy"] {
+  color-scheme: dark; --ov: 220, 245, 240;
+  --bg: #091315; --header: #0c181b; --panel: #0f1d20; --panel2: #152629; --panel3: #1e3236;
+  --line: #1f3236; --line2: #2b4247; --line3: #16262a;
+  --ink: #e9f3f2; --ink2: #c9dcda; --muted: #95aeac; --faint: #5f7775; --heading: #c4f5e9;
+  --accent: #3fd0b4; --accent-ink: #04201a; --accent-soft: #11302b; --accent-line: #24675b; --link: #6ae3cb;
+  --acc-rgb: 63, 208, 180; --acc-hi: #6ae3cb; --acc-lo: #23a58d; --acc-edge: #3fd0b4;
+  --ok: #7bd88f; --ok-soft: #15291b; --hero: #f0b44c; --warn: #f0b44c; --warn-soft: #33290f; --bad: #e0606a; --bad-ink: #f7a7ad; --bad-soft: #2e1619; --bad-line: #64303a;
+  --r0: #2f4246; --r1: #2f6a9a; --r2: #2a8a6c; --r3: #a3731f; --r4: #7a4ea6;
+  --glass: rgba(13, 25, 28, .86); --glass-2: rgba(22, 38, 42, .82); --glass-3: rgba(32, 52, 57, .88); --glass-strong: rgba(10, 19, 21, .97);
+  --glass-line: rgba(120, 225, 205, .12); --glass-line2: rgba(120, 225, 205, .24); --glass-hi: inset 0 1px 0 rgba(200, 255, 240, .05);
+  --shadow: 0 10px 28px rgba(0, 0, 0, .45);
+  --frame: rgba(120, 220, 205, .32); --frame-gap: rgba(6, 13, 15, .6); --frame-inner: rgba(240, 180, 76, .16);
+  --input-bg: rgba(4, 10, 11, .6); --topbar: rgba(9, 18, 20, .94); --hp-fill: linear-gradient(90deg, #23a58d, #7ff0d6); --brand-hue: 335deg;
+  --mark: url(../img/skins/alchemy-mark.svg);
+  --backdrop:
+    radial-gradient(1200px 900px at 50% 40%, transparent 45%, rgba(0, 0, 0, .55) 100%),
+    radial-gradient(800px 560px at 100% 0%, rgba(63, 208, 180, .12), transparent 62%),
+    radial-gradient(700px 520px at 0% 100%, rgba(106, 168, 255, .09), transparent 65%),
+    url(../img/skins/alchemy-molecules.svg) 0 0 / 600px 600px,
+    url(../img/skins/alchemy-grid.svg) 0 0 / 120px 120px,
+    #091315;
+  --corner-art: url(../img/skins/alchemy-lab.svg) right -6px top 56px / 450px auto no-repeat, url(../img/skins/alchemy-helix.svg) left -30px bottom -40px / 400px auto no-repeat;
+}
+html[data-skin="alchemy"] body::after { opacity: .8; }
+/* graduated corner rules on every card, a rack of test tubes in the sheet header's corner */
+html[data-skin="alchemy"] .card, html[data-skin="alchemy"] .sidepanel, html[data-skin="alchemy"] .sheet-cols > .col-main {
+  background: url(../img/skins/alchemy-corner-tl.svg) left 3px top 3px / 20px no-repeat, url(../img/skins/alchemy-corner-tr.svg) right 3px top 3px / 20px no-repeat,
+    url(../img/skins/alchemy-corner-bl.svg) left 3px bottom 3px / 20px no-repeat, url(../img/skins/alchemy-corner-br.svg) right 3px bottom 3px / 20px no-repeat, var(--glass); }
+html[data-skin="alchemy"] .hero-card { background: url(../img/skins/alchemy-rack.svg) right 12px bottom 8px / 78px auto no-repeat,
+  url(../img/skins/alchemy-corner-tl.svg) left 3px top 3px / 20px no-repeat, url(../img/skins/alchemy-corner-tr.svg) right 3px top 3px / 20px no-repeat,
+  url(../img/skins/alchemy-corner-bl.svg) left 3px bottom 3px / 20px no-repeat, url(../img/skins/alchemy-corner-br.svg) right 3px bottom 3px / 20px no-repeat, var(--glass); }
+html[data-skin="alchemy"] section.card[style*="background:transparent"] { background: transparent !important; }
+html[data-skin="alchemy"] h1, html[data-skin="alchemy"] .hero-id h1 { text-shadow: 0 0 12px rgba(63, 208, 180, .3); }
+
+/* ------------------------------------------------------------ Blood & Steel: blades, blood and sharp edges */
+html[data-skin="steel"] {
+  color-scheme: dark; --ov: 235, 238, 242;
+  --bg: #0b0c0e; --header: #111316; --panel: #15171a; --panel2: #1c1f23; --panel3: #272b30;
+  --line: #2a2e34; --line2: #3a3f46; --line3: #1d2024;
+  --ink: #eceef0; --ink2: #ccd0d5; --muted: #9ba1a8; --faint: #656b73; --heading: #eef0f2;
+  --accent: #e0464e; --accent-ink: #ffffff; --accent-soft: #2f1416; --accent-line: #6e2328; --link: #f0727a;
+  --acc-rgb: 224, 70, 78; --acc-hi: #e65860; --acc-lo: #a51d26; --acc-edge: #c8343c;
+  --ok: #6fbf8a; --ok-soft: #15281c; --hero: #e8a84a; --warn: #e8a84a; --warn-soft: #33270f; --bad: #e0464e; --bad-ink: #f59aa0; --bad-soft: #2f1416; --bad-line: #6e2328;
+  --r0: #3a3f46; --r1: #3d6489; --r2: #3f7f58; --r3: #9a6c22; --r4: #74489a;
+  --glass: rgba(20, 22, 25, .86); --glass-2: rgba(32, 35, 40, .84); --glass-3: rgba(44, 48, 54, .9); --glass-strong: rgba(15, 16, 18, .97);
+  --glass-line: rgba(200, 206, 214, .11); --glass-line2: rgba(200, 206, 214, .22); --glass-hi: inset 0 1px 0 rgba(255, 255, 255, .07);
+  --shadow: 0 10px 26px rgba(0, 0, 0, .5);
+  --frame: #4b525a; --frame-gap: rgba(8, 9, 10, .7); --frame-inner: rgba(224, 70, 78, .3);
+  --input-bg: rgba(6, 7, 8, .6); --topbar: rgba(14, 15, 17, .94); --hp-fill: linear-gradient(90deg, #858c94, #dde1e5); --brand-hue: 158deg;
+  --radius: 3px;
+  --mark: url(../img/skins/steel-mark.svg);
+  --backdrop:
+    radial-gradient(1200px 900px at 50% 40%, transparent 40%, rgba(0, 0, 0, .6) 100%),
+    radial-gradient(900px 500px at 50% 110%, rgba(170, 20, 30, .18), transparent 65%),
+    radial-gradient(800px 500px at 100% -10%, rgba(200, 210, 220, .07), transparent 60%),
+    url(../img/skins/steel-brushed.svg) 0 0 / 400px 400px,
+    #0b0c0e;
+  --corner-art: url(../img/skins/steel-blades.svg) right -30px top 50px / 440px auto no-repeat, url(../img/skins/steel-blood.svg) left -40px bottom -30px / 420px auto no-repeat;
+}
+html[data-skin="steel"] body::after { opacity: .55; }
+html[data-skin="steel"] .card, html[data-skin="steel"] .sidepanel, html[data-skin="steel"] .sheet-cols > .col-main {
+  background: url(../img/skins/steel-corner-tl.svg) left 0 top 0 / 16px no-repeat, url(../img/skins/steel-corner-br.svg) right 0 bottom 0 / 16px no-repeat, var(--glass); }
+html[data-skin="steel"] .hero-card { background: url(../img/skins/steel-dagger.svg) right 12px bottom 10px / 110px auto no-repeat,
+  url(../img/skins/steel-corner-tl.svg) left 0 top 0 / 16px no-repeat, url(../img/skins/steel-corner-br.svg) right 0 bottom 0 / 16px no-repeat, var(--glass); }
+html[data-skin="steel"] section.card[style*="background:transparent"] { background: transparent !important; }
+/* everything sharp: square corners instead of rounded ones */
+html[data-skin="steel"] .btn, html[data-skin="steel"] .tabs button, html[data-skin="steel"] .nav a, html[data-skin="steel"] .steps a,
+html[data-skin="steel"] .pill, html[data-skin="steel"] .boost-grid button, html[data-skin="steel"] .lv-num, html[data-skin="steel"] .avatar,
+html[data-skin="steel"] .modal, html[data-skin="steel"] .notice, html[data-skin="steel"] .toast, html[data-skin="steel"] .icon-btn,
+html[data-skin="steel"] input, html[data-skin="steel"] select, html[data-skin="steel"] textarea,
+html[data-skin="steel"] .chipbtn, html[data-skin="steel"] .chip, html[data-skin="steel"] .chip-btn, html[data-skin="steel"] .inv-toggle, html[data-skin="steel"] .tchip,
+html[data-skin="steel"] .gm-slot, html[data-skin="steel"] .gm-cond, html[data-skin="steel"] .where-tag, html[data-skin="steel"] .gain-chip, html[data-skin="steel"] .st-tog,
+html[data-skin="steel"] .act-seg, html[data-skin="steel"] .act-seg button, html[data-skin="steel"] .act-seg .n, html[data-skin="steel"] .act-list .act-row .uses { border-radius: 2px; }
+/* bright steel on the big titles, a red line along the top bar */
+html[data-skin="steel"] .hero-id h1 { background: linear-gradient(180deg, #ffffff 30%, #9aa1a9); -webkit-background-clip: text; background-clip: text; color: transparent; }
+html[data-skin="steel"] .topbar { box-shadow: 0 1px 0 var(--frame-gap), 0 2px 0 rgba(200, 40, 50, .55); }
+html[data-skin="steel"] .btn.primary { box-shadow: 0 3px 14px rgba(200, 30, 40, .35), inset 0 1px 0 rgba(255, 255, 255, .25); }
+
+/* ------------------------------------------------------------ Frost: ice, rime and snow */
+html[data-skin="frost"] {
+  color-scheme: light; --ov: 10, 40, 70;
+  --bg: #dce8f1; --header: #f1f7fb; --panel: #f4f9fc; --panel2: #e7f0f7; --panel3: #d6e5f0;
+  --line: #c4d7e6; --line2: #a8c1d6; --line3: #dbe7f1;
+  --ink: #0e2131; --ink2: #23394d; --muted: #4f667c; --faint: #8096aa; --heading: #0f3a5e;
+  --accent: #157399; --accent-ink: #ffffff; --accent-soft: #d6ecf4; --accent-line: #8ec4d9; --link: #0f6688;
+  --acc-rgb: 21, 115, 153; --acc-hi: #2a91b9; --acc-lo: #0f5a7a; --acc-edge: #0d5170;
+  --ok: #1f7f5c; --ok-soft: #dcf0e6; --hero: #96650d; --warn: #96650d; --warn-soft: #f6ebd2; --bad: #b42d3c; --bad-ink: #a32433; --bad-soft: #f8e1e4; --bad-line: #e8aab3;
+  --r0: #9fb1c1; --r1: #2b5f8c; --r2: #2c7556; --r3: #8f6210; --r4: #64408f;
+  --glass: rgba(246, 251, 254, .86); --glass-2: rgba(234, 243, 249, .9); --glass-3: rgba(216, 230, 241, .95); --glass-strong: rgba(248, 252, 255, .97);
+  --glass-line: rgba(30, 80, 120, .14); --glass-line2: rgba(30, 80, 120, .26); --glass-hi: inset 0 1px 0 rgba(255, 255, 255, .8);
+  --shadow: 0 6px 20px rgba(30, 70, 110, .12);
+  --frame: #a9c6dc; --frame-gap: #fbfdff; --frame-inner: rgba(60, 140, 190, .26);
+  --input-bg: #fbfdff; --topbar: rgba(240, 247, 252, .93); --hp-fill: linear-gradient(90deg, #2a8f8a, #4cc0d6); --brand-hue: -12deg;
+  --mark: url(../img/skins/frost-mark.svg);
+  --backdrop:
+    radial-gradient(700px 520px at 0% 0%, rgba(255, 255, 255, .85), transparent 65%),
+    radial-gradient(700px 520px at 100% 100%, rgba(255, 255, 255, .8), transparent 65%),
+    radial-gradient(1100px 700px at 60% 30%, rgba(150, 200, 230, .25), transparent 70%),
+    url(../img/skins/frost-flakes.svg) 0 0 / 360px 360px,
+    linear-gradient(180deg, #e4eef5, #d3e3ee);
+  --corner-art: url(../img/skins/frost-crystal-tl.svg) left -4px top 52px / 470px auto no-repeat, url(../img/skins/frost-crystal-br.svg) right -4px bottom -4px / 470px auto no-repeat;
+}
+html[data-skin="frost"] body::after { opacity: .85; }
+html[data-skin="frost"] .lvl-bar { background: linear-gradient(90deg, rgba(var(--acc-rgb), .12), rgba(var(--acc-rgb), .03) 70%), var(--glass); }
+/* rime along the top of every card, a spray of ice in the corners */
+html[data-skin="frost"] .card, html[data-skin="frost"] .sidepanel, html[data-skin="frost"] .sheet-cols > .col-main {
+  background: url(../img/skins/frost-corner-tl.svg) left 3px top 3px / 18px no-repeat, url(../img/skins/frost-corner-br.svg) right 3px bottom 3px / 18px no-repeat,
+    linear-gradient(180deg, rgba(255, 255, 255, .9), rgba(255, 255, 255, 0) 22px), var(--glass); }
+html[data-skin="frost"] .hero-card { background: url(../img/skins/frost-flakes-card.svg) right 12px bottom 6px / 84px auto no-repeat,
+  url(../img/skins/frost-corner-tl.svg) left 3px top 3px / 18px no-repeat, url(../img/skins/frost-corner-br.svg) right 3px bottom 3px / 18px no-repeat,
+  linear-gradient(180deg, rgba(255, 255, 255, .9), rgba(255, 255, 255, 0) 22px), var(--glass); }
+html[data-skin="frost"] section.card[style*="background:transparent"] { background: transparent !important; }
+/* icicles hanging under the top bar */
+html[data-skin="frost"] .topbar::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 13px; pointer-events: none;
+  background: url(../img/skins/frost-icicles.svg) 0 0 / 140px 13px repeat-x; }
+
+/* Text that sits straight on the background (page titles, group labels) gets a soft halo in the page colour, so the
+   corner art behind it never gets in the way of reading it; the licence line at the bottom gets a band like the top bar. */
+html[data-skin="alchemy"] .page-title h1, html[data-skin="alchemy"] .group > .group-title h2,
+html[data-skin="steel"] .page-title h1, html[data-skin="steel"] .group > .group-title h2,
+html[data-skin="frost"] .page-title h1, html[data-skin="frost"] .group > .group-title h2 {
+  text-shadow: 0 0 2px var(--bg), 0 0 6px var(--bg), 0 0 12px var(--bg), 0 0 18px var(--bg); }
+html[data-skin="alchemy"] .footer, html[data-skin="steel"] .footer, html[data-skin="frost"] .footer { background: var(--topbar); }

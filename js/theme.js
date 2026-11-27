@@ -9,6 +9,9 @@ export const SKINS = [
   { id: 'tome', name: 'Tome', mode: 'light', color: '#f4ead2', note: 'Old manuscript, notes in the margins' },
   { id: 'grove', name: 'Grove', mode: 'dark', color: '#20160e', note: 'Wood, vines and leaves' },
   { id: 'cosmos', name: 'Cosmos', mode: 'dark', color: '#0d0b1c', note: 'Stars, a ringed world and the void' },
+  { id: 'alchemy', name: 'Alchemy', mode: 'dark', color: '#0c181b', note: 'A laboratory: glassware, formulas and medicine' },
+  { id: 'steel', name: 'Blood & Steel', mode: 'dark', color: '#111316', note: 'Blades, blood and sharp edges' },
+  { id: 'frost', name: 'Frost', mode: 'light', color: '#f1f7fb', note: 'Ice, rime and snow' },
 ];
 const saved = () => { try { return localStorage.getItem(KEY); } catch (e) { return null; } };
 const savedSkin = () => { try { return localStorage.getItem(SKIN_KEY) || ''; } catch (e) { return ''; } };
