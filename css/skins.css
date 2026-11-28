@@ -452,11 +452,11 @@ html[data-skin="clockwork"] {
   --backdrop:
     radial-gradient(1200px 900px at 50% 40%, transparent 42%, rgba(0, 0, 0, .58) 100%),
     radial-gradient(circle at calc(100% - 210px) calc(100% - 210px), rgba(255, 224, 150, .24) 0, rgba(255, 208, 120, .08) 46px, transparent 92px),
-    radial-gradient(circle at calc(100% - 210px) calc(100% - 210px), transparent 0 128px, rgba(240, 196, 103, .26) 128px 129.5px, transparent 130.5px 186px,
-      rgba(240, 196, 103, .34) 186px 188px, transparent 189px 212px, rgba(240, 196, 103, .15) 212px 213px, transparent 214px),
+    radial-gradient(circle at calc(100% - 210px) calc(100% - 210px), transparent 0 128px, rgba(214, 220, 230, .24) 128px 129.5px, transparent 130.5px 186px,
+      rgba(240, 196, 103, .34) 186px 188px, transparent 189px 212px, rgba(214, 220, 230, .15) 212px 213px, transparent 214px),
     radial-gradient(circle at calc(100% - 210px) calc(100% - 210px), rgba(255, 200, 110, .07) 0, transparent 260px),
     conic-gradient(from 0deg at 100% 0%, transparent 0 202deg, rgba(255, 214, 140, .042) 203.4deg 204.4deg, transparent 206deg 212deg,
-      rgba(255, 214, 140, .032) 214deg 216deg, transparent 218.5deg 225.5deg, rgba(255, 214, 140, .036) 226.8deg 227.6deg, transparent 229deg 236deg,
+      rgba(220, 228, 240, .034) 214deg 216deg, transparent 218.5deg 225.5deg, rgba(255, 214, 140, .036) 226.8deg 227.6deg, transparent 229deg 236deg,
       rgba(255, 214, 140, .026) 238deg 240.5deg, transparent 243deg),
     radial-gradient(900px 620px at 100% 0%, rgba(240, 180, 80, .17), transparent 62%),
     radial-gradient(1100px 700px at 50% -10%, rgba(70, 52, 120, .22), transparent 70%),
@@ -466,7 +466,7 @@ html[data-skin="clockwork"] {
     linear-gradient(170deg, #15111a, #110d0a 45%, #0e0a07 70%, #140e09);
   --corner-art:
     repeating-conic-gradient(from -1deg at calc(100% - 210px) calc(100% - 210px), rgba(255, 231, 168, .6) 0deg 1.8deg, transparent 2.2deg 30deg),
-    repeating-conic-gradient(from 0deg at calc(100% - 210px) calc(100% - 210px), rgba(246, 214, 136, .34) 0deg .5deg, transparent .85deg 6deg);
+    repeating-conic-gradient(from 0deg at calc(100% - 210px) calc(100% - 210px), rgba(214, 220, 232, .32) 0deg .5deg, transparent .85deg 6deg);
 }
 /* the dial's ticks: only a ring of them shows */
 html[data-skin="clockwork"] body::after { opacity: 1;
@@ -493,7 +493,7 @@ html[data-skin="clockwork"] .btn.primary, html[data-skin="clockwork"] .boost-gri
 html[data-skin="clockwork"] .btn.primary:hover { background: linear-gradient(180deg, #fff0c4 0%, #efc56a 45%, #c8913a 55%, #e8bd66 100%); }
 /* a brass rail under the top bar, riveted every few centimetres */
 html[data-skin="clockwork"] .topbar::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 5px; pointer-events: none;
-  background: radial-gradient(circle at 50% 50%, #fff3cf 0 .9px, #b07a2c 1.4px, #5c3b12 2px, transparent 2.4px) 12px 0 / 48px 5px repeat-x,
+  background: radial-gradient(circle at 50% 50%, #ffffff 0 .9px, #b9bec8 1.4px, #5d626c 2px, transparent 2.4px) 12px 0 / 48px 5px repeat-x,
     linear-gradient(180deg, #f6d688, #c48d36 55%, #6f4815); box-shadow: 0 2px 6px rgba(0, 0, 0, .55), 0 3px 14px rgba(255, 211, 106, .2); }
 /* the HP bar glows like gold thread */
 html[data-skin="clockwork"] .hpbar > div:first-child:not(.low):not(.crit) { box-shadow: 0 0 8px rgba(255, 211, 106, .45); }
@@ -510,3 +510,7 @@ html[data-skin] .rules-text { font-size: 15px; line-height: 1.55; }
 html[data-skin] .spell-line .sub, html[data-skin] .identity { font-size: 13.5px; }
 
 html[data-skin] .hero-id .identity, html[data-skin] .identity { font-weight: 500; font-size: 13.5px; }
+/* hints of silver: a silver edge on the secondary buttons (the main ones stay brass) */
+html[data-skin="clockwork"] .btn:not(.primary):not(.danger) { border-color: rgba(205, 212, 224, .26); box-shadow: inset 0 1px 0 rgba(235, 240, 248, .08); }
+html[data-skin="clockwork"] .btn:not(.primary):not(.danger):hover { border-color: rgba(215, 222, 234, .45); }
+
