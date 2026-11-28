@@ -980,7 +980,7 @@ export class Engine {
       const item = armor ? (armor.rec.ac || 0) + (armor.potency || armor.rec.runes?.potency || 0) : 0;
       const { mods, notes } = statMods('ac', 'dex');
       if (item) mods.push({ label: armor.rec.name, value: item, type: 'item' });
-      if (state.raging && ch.class?.slug === 'barbarian') mods.push({ label: 'Rage', value: -1, type: 'untyped' });
+      // Rage gives no AC penalty: that was the Core Rulebook barbarian; Player Core 2's Rage (Foundry's effect) has none.
       if (shield && state.shieldRaised) mods.push({ label: shield.rec.name + ' (raised)', value: shield.rec.shieldAc || 2, type: 'circumstance' });
       const s = stackMods(mods);
       ch.ac = { total: 10 + dex + rankBonus(rank, L) + s.total, rank, dex, dexCap: armor ? dexCap : null, mods: s.used, notes, category: cat };
