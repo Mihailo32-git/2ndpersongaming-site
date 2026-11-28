@@ -1304,9 +1304,14 @@ export class Engine {
       if (/\{(item|actor)\|/.test(JSON.stringify(def))) continue;
       familiar.push({ def, sameAs: r.sameAs, value: typeof r.value === 'number' ? r.value : null, slug: r.slug });
     }
-    const familiarRank = (rec) => {
+    // ranged: the Strike's own reading (thrown weapons are melee). Mauler Dedication asks for "item:melee" and
+    // "item:usage:hands:2" (melee weapons that need two hands), Aristocratic Arms for one-handed weapons and shields.
+    const familiarRank = (rec, ranged = false) => {
       if (!familiar.length) return 0;
-      const o = new Set([`item:category:${rec.cat}`, `item:slug:${rec.slug}`, ...(rec.traits || []).map((t) => 'item:trait:' + t)]);
+      const o = new Set([`item:category:${rec.cat}`, `item:slug:${rec.slug}`, ...(rec.traits || []).map((t) => 'item:trait:' + t),
+        ranged ? 'item:ranged' : 'item:melee']);
+      if (rec.type) o.add('item:type:' + rec.type);
+      if (rec.usage) o.add('item:usage:hands:' + (/two-hands/.test(rec.usage) ? 2 : 1));
       if (rec.base) o.add('item:base:' + rec.base);
       if (rec.group) o.add('item:group:' + rec.group);
       if (!rec.base && rec.slug) o.add('item:base:' + rec.slug);
@@ -1325,7 +1330,7 @@ export class Engine {
       const thrown = traits.some((t) => t.startsWith('thrown')) || traits.includes('bomb');
       const finesse = traits.includes('finesse');
       let attr = ranged ? 'dex' : (finesse && A.dex > A.str ? 'dex' : 'str');
-      const rank = Math.max(R.attacks[rec.cat] || 0, rec.base ? (R.attacks['weapon-base-' + rec.base] || 0) : 0, rec.group ? (R.attacks['weapon-group-' + rec.group] || 0) : 0, familiarRank(rec));
+      const rank = Math.max(R.attacks[rec.cat] || 0, rec.base ? (R.attacks['weapon-base-' + rec.base] || 0) : 0, rec.group ? (R.attacks['weapon-group-' + rec.group] || 0) : 0, familiarRank(rec, ranged));
       const potency = item ? (item.potency ?? rec.runes?.potency ?? 0) : 0;
       const striking = item ? (item.striking ?? rec.runes?.striking ?? 0) : 0;
       const wOpts = new Set(itemOptions({ ...rec, cat: rec.cat }, 'equipment'));
