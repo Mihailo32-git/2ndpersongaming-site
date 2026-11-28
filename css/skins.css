@@ -346,30 +346,67 @@ html[data-skin="blast"] .topbar::after { content: ''; position: absolute; left: 
 
 /* ------------------------------------------------------------ Mirrorshard: shattered mirrors, glass and fractured reality */
 html[data-skin="mirror"] {
-  color-scheme: dark; --ov: 230, 238, 255;
-  --bg: #0a0c12; --header: #0f1219; --panel: #121622; --panel2: #1a1f2e; --panel3: #242a3d;
-  --line: #252b3d; --line2: #333b52; --line3: #1b2030;
-  --ink: #eef2fa; --ink2: #ccd4e4; --muted: #9aa4bb; --faint: #646d84; --heading: #f4f7ff;
-  --accent: #8fe3ff; --accent-ink: #061018; --accent-soft: #14283a; --accent-line: #2f5f7a; --link: #a9ebff;
-  --acc-rgb: 143, 227, 255; --acc-hi: #ffffff; --acc-lo: #aab6ca; --acc-edge: #e6ecf5;
+  color-scheme: dark; --ov: 240, 235, 249;
+  --bg: #0b0b11; --header: #111017; --panel: #14141e; --panel2: #1c1c2a; --panel3: #272738;
+  --line: #292839; --line2: #37374d; --line3: #1e1e2c;
+  --ink: #f2f1f8; --ink2: #d3d1df; --muted: #a2a0b4; --faint: #6a687c; --heading: #f8f6fd;
+  --accent: #cdbcdd; --accent-ink: #110a14; --accent-soft: #201c2a; --accent-line: #584766; --link: #d8cfe6;
+  --acc-rgb: 205, 188, 221; --acc-hi: #ffffff; --acc-lo: #b4aec1; --acc-edge: #ebe6f0;
   --ok: #7fe0b0; --ok-soft: #142a22; --hero: #ffd27a; --warn: #ffd27a; --warn-soft: #33290f; --bad: #ff6f8f; --bad-ink: #ffb0c2; --bad-soft: #2e1420; --bad-line: #66293f;
-  --r0: #333b52; --r1: #3f6ea8; --r2: #2f8a78; --r3: #a3772a; --r4: #8657c9;
-  --glass: rgba(18, 22, 34, .8); --glass-2: rgba(28, 33, 48, .78); --glass-3: rgba(40, 47, 66, .86); --glass-strong: rgba(13, 16, 24, .96);
-  --glass-line: rgba(220, 230, 250, .12); --glass-line2: rgba(220, 230, 250, .24); --glass-hi: inset 0 1px 0 rgba(255, 255, 255, .08);
+  --r0: #37374d; --r1: #3f6ea8; --r2: #2f8a78; --r3: #a3772a; --r4: #8657c9;
+  --glass: rgba(20, 20, 31, .8); --glass-2: rgba(30, 30, 44, .78); --glass-3: rgba(43, 43, 60, .86); --glass-strong: rgba(15, 14, 22, .96);
+  --glass-line: rgba(232, 226, 244, .12); --glass-line2: rgba(232, 226, 244, .24); --glass-hi: inset 0 1px 0 rgba(255, 255, 255, .08);
   --shadow: 0 10px 30px rgba(0, 0, 0, .45);
-  --frame: rgba(210, 222, 245, .3); --frame-gap: rgba(5, 6, 10, .6); --frame-inner: rgba(143, 227, 255, .14);
-  --input-bg: rgba(5, 6, 10, .6); --topbar: rgba(12, 14, 21, .9); --hp-fill: linear-gradient(90deg, #6fe3ff, #a98bff, #ff8fd8); --brand-hue: 0deg;
+  --frame: rgba(224, 217, 238, .3); --frame-gap: rgba(6, 6, 10, .6); --frame-inner: rgba(205, 188, 221, .14);
+  --input-bg: rgba(6, 6, 10, .6); --topbar: rgba(13, 13, 19, .9); --hp-fill: linear-gradient(90deg, #8fe3ff, #b99bff, #ff9cc8); --brand-hue: 70deg;
   --mark: url(../img/skins/mirror-mark.svg);
+  /* No corner pictures: a shatter drawn in light top right (its cracks on body::after), glass sheen, rose and crimson glows, the facet texture. */
   --backdrop:
     radial-gradient(1200px 900px at 50% 40%, transparent 45%, rgba(0, 0, 0, .55) 100%),
-    radial-gradient(900px 600px at 100% 0%, rgba(143, 227, 255, .1), transparent 62%),
-    radial-gradient(800px 600px at 0% 100%, rgba(255, 111, 181, .08), transparent 65%),
-    radial-gradient(700px 500px at 40% 60%, rgba(169, 139, 255, .06), transparent 70%),
+    radial-gradient(circle at calc(100% - 330px) 60%, rgba(255, 245, 250, .2) 0, rgba(255, 170, 205, .1) 40px, transparent 160px),
+    radial-gradient(900px 620px at 100% 0%, rgba(200, 170, 240, .12), transparent 62%),
+    radial-gradient(820px 600px at 0% 100%, rgba(200, 70, 120, .09), transparent 65%),
+    radial-gradient(600px 420px at 30% 75%, rgba(170, 120, 255, .07), transparent 70%),
+    radial-gradient(520px 380px at 58% 28%, rgba(111, 227, 255, .06), transparent 70%),
+    linear-gradient(115deg, transparent 38%, rgba(255, 225, 238, .035) 42%, transparent 44%, transparent 52%, rgba(255, 225, 238, .025) 54%, transparent 55.5%),
+    linear-gradient(115deg, transparent 70%, rgba(255, 225, 238, .03) 73%, transparent 75%),
     url(../img/skins/mirror-facets.svg) 0 0 / 240px 240px,
-    #0a0c12;
-  --corner-art: url(../img/skins/mirror-shatter.svg) right -20px top 46px / 500px auto no-repeat, url(../img/skins/mirror-kaleido.svg) left -20px bottom -20px / 440px auto no-repeat;
+    linear-gradient(165deg, #0f0c13, #0b0b11 50%, #0d0b0f);
+  --corner-art:
+    radial-gradient(circle at calc(100% - 426px) calc(60% - 34px), rgba(255, 255, 255, .85) 0, rgba(255, 220, 238, .25) 2px, transparent 7px),
+    radial-gradient(circle at calc(100% - 212px) calc(60% + 58px), rgba(255, 255, 255, .85) 0, rgba(255, 220, 238, .25) 2px, transparent 7px),
+    radial-gradient(circle at calc(100% - 370px) calc(60% + 112px), rgba(255, 255, 255, .85) 0, rgba(255, 220, 238, .25) 2px, transparent 7px),
+    radial-gradient(circle at calc(100% - 268px) calc(60% - 120px), rgba(255, 255, 255, .85) 0, rgba(255, 220, 238, .25) 2px, transparent 7px),
+    radial-gradient(circle at calc(100% - 120px) calc(60% - 70px), rgba(255, 255, 255, .85) 0, rgba(255, 220, 238, .25) 2px, transparent 7px),
+    radial-gradient(circle at calc(100% - 530px) calc(60% + 90px), rgba(255, 255, 255, .85) 0, rgba(255, 220, 238, .25) 2px, transparent 7px),
+    radial-gradient(circle at calc(100% - 180px) calc(60% + 180px), rgba(255, 255, 255, .85) 0, rgba(255, 220, 238, .25) 2px, transparent 7px),
+    radial-gradient(circle at calc(100% - 580px) calc(60% - 40px), rgba(255, 255, 255, .85) 0, rgba(255, 220, 238, .25) 2px, transparent 7px),
+    conic-gradient(from 99deg at 0 0, rgba(255, 252, 254, .75) 0 1.6deg, rgba(170, 235, 255, .15) 1.6deg 30deg, transparent 30deg) calc(100% - 520px) calc(60% - 70px) / 62px 30px no-repeat,
+    conic-gradient(from 193deg at 100% 0, rgba(255, 252, 254, .75) 0 1.6deg, rgba(255, 255, 255, .18) 1.6deg 30deg, transparent 30deg) calc(100% - 460px) calc(60% + 80px) / 40px 58px no-repeat,
+    conic-gradient(from 12deg at 0 100%, rgba(255, 252, 254, .75) 0 1.6deg, rgba(255, 255, 255, .18) 1.6deg 46deg, transparent 47deg) calc(100% - 180px) calc(60% - 100px) / 58px 34px no-repeat,
+    conic-gradient(from 99deg at 0 0, rgba(255, 252, 254, .75) 0 1.6deg, rgba(255, 190, 220, .15) 1.6deg 39deg, transparent 39deg) calc(100% - 110px) calc(60% + 46px) / 36px 54px no-repeat,
+    conic-gradient(from 287deg at 100% 100%, rgba(255, 252, 254, .75) 0 1.6deg, rgba(255, 190, 220, .15) 1.6deg 45deg, transparent 45deg) calc(100% - 400px) calc(60% + 170px) / 64px 32px no-repeat,
+    conic-gradient(from 9deg at 0 100%, rgba(255, 252, 254, .75) 0 1.6deg, rgba(255, 190, 220, .15) 1.6deg 47deg, transparent 47deg) calc(100% - 234px) calc(60% + 150px) / 42px 44px no-repeat,
+    conic-gradient(from 197deg at 100% 0, rgba(255, 252, 254, .75) 0 1.6deg, rgba(255, 190, 220, .15) 1.6deg 32deg, transparent 32deg) calc(100% - 600px) calc(60% + 16px) / 48px 24px no-repeat,
+    conic-gradient(from 280deg at 100% 100%, rgba(255, 252, 254, .75) 0 1.6deg, rgba(255, 190, 220, .15) 1.6deg 45deg, transparent 46deg) calc(100% - 294px) calc(60% - 180px) / 30px 50px no-repeat,
+    conic-gradient(from 7deg at 0 100%, rgba(255, 252, 254, .75) 0 1.6deg, rgba(170, 235, 255, .15) 1.6deg 40deg, transparent 41deg) calc(100% - 50px) calc(60% - 30px) / 52px 28px no-repeat,
+    conic-gradient(from 103deg at 0 0, rgba(255, 252, 254, .75) 0 1.6deg, rgba(170, 235, 255, .15) 1.6deg 32deg, transparent 32deg) calc(100% - 500px) calc(60% - 170px) / 34px 38px no-repeat,
+    conic-gradient(from 280deg at 100% 100%, rgba(255, 252, 254, .75) 0 1.6deg, rgba(255, 190, 220, .15) 1.6deg 47deg, transparent 47deg) calc(100% - 630px) calc(60% - 110px) / 40px 22px no-repeat,
+    conic-gradient(from 186deg at 100% 0, rgba(255, 252, 254, .75) 0 1.6deg, rgba(255, 190, 220, .15) 1.6deg 34deg, transparent 34deg) calc(100% - 0px) calc(60% + 110px) / 44px 30px no-repeat,
+    conic-gradient(from 108deg at 0 0, rgba(255, 252, 254, .75) 0 1.6deg, rgba(170, 235, 255, .15) 1.6deg 38deg, transparent 39deg) calc(100% - 350px) calc(60% + 250px) / 36px 46px no-repeat,
+    conic-gradient(from 12deg at 0 100%, rgba(255, 252, 254, .75) 0 1.6deg, rgba(170, 235, 255, .15) 1.6deg 34deg, transparent 34deg) calc(100% - 150px) calc(60% + 230px) / 50px 26px no-repeat,
+    radial-gradient(circle at calc(100% - 330px) 60%, rgba(255, 255, 255, .85) 0, rgba(255, 210, 228, .3) 9px, rgba(255, 170, 205, .08) 30px, transparent 60px),
+    radial-gradient(circle at calc(100% - 330px) 60%, transparent 0 38px, rgba(255, 228, 240, 0.3) 38px 39.2px, transparent 39.2px 54px, rgba(255, 228, 240, 0.34) 54px 55.2px, transparent 55.2px 97px, rgba(255, 228, 240, 0.2) 97px 98.2px, transparent 98.2px 126px, rgba(255, 228, 240, 0.26) 126px 127.2px, transparent 127.2px 171px, rgba(255, 228, 240, 0.14) 171px 172.2px, transparent 172.2px 214px, rgba(255, 228, 240, 0.18) 214px 215.2px, transparent 215.2px 262px, rgba(255, 228, 240, 0.1) 262px 263.2px, transparent 263.2px 318px, rgba(255, 228, 240, 0.1) 318px 319.2px, transparent 319.2px 372px, rgba(255, 228, 240, 0.07) 372px 373.2px, transparent 373.4px),
+    conic-gradient(from 0deg at calc(100% - 330px) 60%, transparent 6deg, rgba(255, 244, 250, 0.5) 6.12deg 6.62deg, transparent 6.78deg, transparent 29deg, rgba(255, 244, 250, 0.5) 29.12deg 29.62deg, transparent 29.78deg, transparent 51deg, rgba(255, 244, 250, 0.5) 51.12deg 51.62deg, transparent 51.78deg, transparent 68deg, rgba(255, 244, 250, 0.5) 68.12deg 68.62deg, transparent 68.78deg, transparent 97deg, rgba(255, 244, 250, 0.5) 97.12deg 97.62deg, transparent 97.78deg, transparent 121deg, rgba(255, 244, 250, 0.5) 121.12deg 121.62deg, transparent 121.78deg, transparent 139deg, rgba(255, 244, 250, 0.5) 139.12deg 139.62deg, transparent 139.78deg, transparent 166deg, rgba(255, 244, 250, 0.5) 166.12deg 166.62deg, transparent 166.78deg, transparent 188deg, rgba(255, 244, 250, 0.5) 188.12deg 188.62deg, transparent 188.78deg, transparent 214deg, rgba(255, 244, 250, 0.5) 214.12deg 214.62deg, transparent 214.78deg, transparent 233deg, rgba(255, 244, 250, 0.5) 233.12deg 233.62deg, transparent 233.78deg, transparent 259deg, rgba(255, 244, 250, 0.5) 259.12deg 259.62deg, transparent 259.78deg, transparent 282deg, rgba(255, 244, 250, 0.5) 282.12deg 282.62deg, transparent 282.78deg, transparent 301deg, rgba(255, 244, 250, 0.5) 301.12deg 301.62deg, transparent 301.78deg, transparent 329deg, rgba(255, 244, 250, 0.5) 329.12deg 329.62deg, transparent 329.78deg, transparent 347deg, rgba(255, 244, 250, 0.5) 347.12deg 347.62deg, transparent 347.78deg),
+    conic-gradient(from 0deg at calc(100% - 330px) 60%, transparent 5.1deg, rgba(255, 111, 181, .42) 5.2deg 5.55deg, transparent 5.65deg, rgba(111, 227, 255, .38) 6.6deg 6.95deg, transparent 7.05deg, transparent 28.1deg, rgba(255, 111, 181, .42) 28.2deg 28.55deg, transparent 28.65deg, rgba(111, 227, 255, .38) 29.6deg 29.95deg, transparent 30.05deg, transparent 50.1deg, rgba(255, 111, 181, .42) 50.2deg 50.55deg, transparent 50.65deg, rgba(111, 227, 255, .38) 51.6deg 51.95deg, transparent 52.05deg, transparent 67.1deg, rgba(255, 111, 181, .42) 67.2deg 67.55deg, transparent 67.65deg, rgba(111, 227, 255, .38) 68.6deg 68.95deg, transparent 69.05deg, transparent 96.1deg, rgba(255, 111, 181, .42) 96.2deg 96.55deg, transparent 96.65deg, rgba(111, 227, 255, .38) 97.6deg 97.95deg, transparent 98.05deg, transparent 120.1deg, rgba(255, 111, 181, .42) 120.2deg 120.55deg, transparent 120.65deg, rgba(111, 227, 255, .38) 121.6deg 121.95deg, transparent 122.05deg, transparent 138.1deg, rgba(255, 111, 181, .42) 138.2deg 138.55deg, transparent 138.65deg, rgba(111, 227, 255, .38) 139.6deg 139.95deg, transparent 140.05deg, transparent 165.1deg, rgba(255, 111, 181, .42) 165.2deg 165.55deg, transparent 165.65deg, rgba(111, 227, 255, .38) 166.6deg 166.95deg, transparent 167.05deg, transparent 187.1deg, rgba(255, 111, 181, .42) 187.2deg 187.55deg, transparent 187.65deg, rgba(111, 227, 255, .38) 188.6deg 188.95deg, transparent 189.05deg, transparent 213.1deg, rgba(255, 111, 181, .42) 213.2deg 213.55deg, transparent 213.65deg, rgba(111, 227, 255, .38) 214.6deg 214.95deg, transparent 215.05deg, transparent 232.1deg, rgba(255, 111, 181, .42) 232.2deg 232.55deg, transparent 232.65deg, rgba(111, 227, 255, .38) 233.6deg 233.95deg, transparent 234.05deg, transparent 258.1deg, rgba(255, 111, 181, .42) 258.2deg 258.55deg, transparent 258.65deg, rgba(111, 227, 255, .38) 259.6deg 259.95deg, transparent 260.05deg, transparent 281.1deg, rgba(255, 111, 181, .42) 281.2deg 281.55deg, transparent 281.65deg, rgba(111, 227, 255, .38) 282.6deg 282.95deg, transparent 283.05deg, transparent 300.1deg, rgba(255, 111, 181, .42) 300.2deg 300.55deg, transparent 300.65deg, rgba(111, 227, 255, .38) 301.6deg 301.95deg, transparent 302.05deg, transparent 328.1deg, rgba(255, 111, 181, .42) 328.2deg 328.55deg, transparent 328.65deg, rgba(111, 227, 255, .38) 329.6deg 329.95deg, transparent 330.05deg, transparent 346.1deg, rgba(255, 111, 181, .42) 346.2deg 346.55deg, transparent 346.65deg, rgba(111, 227, 255, .38) 347.6deg 347.95deg, transparent 348.05deg),
+    conic-gradient(from 0deg at calc(100% - 330px) 60%, transparent 17deg, rgba(255, 244, 250, 0.24) 17.08deg 17.32deg, transparent 17.42deg, transparent 40deg, rgba(255, 244, 250, 0.24) 40.08deg 40.32deg, transparent 40.42deg, transparent 59deg, rgba(255, 244, 250, 0.24) 59.08deg 59.32deg, transparent 59.42deg, transparent 82deg, rgba(255, 244, 250, 0.24) 82.08deg 82.32deg, transparent 82.42deg, transparent 108deg, rgba(255, 244, 250, 0.24) 108.08deg 108.32deg, transparent 108.42deg, transparent 130deg, rgba(255, 244, 250, 0.24) 130.08deg 130.32deg, transparent 130.42deg, transparent 153deg, rgba(255, 244, 250, 0.24) 153.08deg 153.32deg, transparent 153.42deg, transparent 177deg, rgba(255, 244, 250, 0.24) 177.08deg 177.32deg, transparent 177.42deg, transparent 201deg, rgba(255, 244, 250, 0.24) 201.08deg 201.32deg, transparent 201.42deg, transparent 223deg, rgba(255, 244, 250, 0.24) 223.08deg 223.32deg, transparent 223.42deg, transparent 246deg, rgba(255, 244, 250, 0.24) 246.08deg 246.32deg, transparent 246.42deg, transparent 270deg, rgba(255, 244, 250, 0.24) 270.08deg 270.32deg, transparent 270.42deg, transparent 292deg, rgba(255, 244, 250, 0.24) 292.08deg 292.32deg, transparent 292.42deg, transparent 315deg, rgba(255, 244, 250, 0.24) 315.08deg 315.32deg, transparent 315.42deg, transparent 338deg, rgba(255, 244, 250, 0.24) 338.08deg 338.32deg, transparent 338.42deg, transparent 356deg, rgba(255, 244, 250, 0.24) 356.08deg 356.32deg, transparent 356.42deg),
+    conic-gradient(from 0deg at calc(100% - 330px) 60%, transparent 29.6deg, rgba(255, 255, 255, .055) 29.7deg 51deg, transparent 51.1deg, transparent 68.6deg, rgba(205, 188, 221, .05) 68.7deg 97deg, transparent 97.1deg, transparent 121.6deg, rgba(255, 255, 255, .075) 121.7deg 139deg, transparent 139.1deg, transparent 166.6deg, rgba(255, 156, 200, .045) 166.7deg 188deg, transparent 188.1deg, transparent 233.6deg, rgba(255, 255, 255, .05) 233.7deg 259deg, transparent 259.1deg, transparent 282.6deg, rgba(111, 227, 255, .045) 282.7deg 301deg, transparent 301.1deg, transparent 329.6deg, rgba(255, 255, 255, .065) 329.7deg 347deg, transparent 347.1deg);
 }
-html[data-skin="mirror"] body::after { opacity: .7; }
+
+/* the shatter fades out from its impact point */
+html[data-skin="mirror"] body::after { opacity: .82;
+  -webkit-mask: radial-gradient(circle at calc(100% - 330px) 60%, #000 0 110px, rgba(0, 0, 0, .55) 260px, transparent 480px);
+  mask: radial-gradient(circle at calc(100% - 330px) 60%, #000 0 110px, rgba(0, 0, 0, .55) 260px, transparent 480px); }
 /* glass panes: a reflective sheen across each card, its edges split pink and cyan like light through a crack */
 html[data-skin="mirror"] .card, html[data-skin="mirror"] .hero-card, html[data-skin="mirror"] .sidepanel, html[data-skin="mirror"] .sheet-cols > .col-main {
   box-shadow: inset 0 0 0 3px var(--frame-gap), inset 0 0 0 4px var(--frame-inner), inset 1px 0 0 rgba(255, 111, 181, .22), inset -1px 0 0 rgba(111, 227, 255, .22), var(--shadow); }
@@ -385,9 +422,9 @@ html[data-skin="mirror"] h1, html[data-skin="mirror"] .hero-id h1 { text-shadow:
 html[data-skin="mirror"] .sc-head h3, html[data-skin="mirror"] .modal header h2 { text-shadow: -1px 0 rgba(255, 111, 181, .45), 1px 0 rgba(111, 227, 255, .45); }
 /* polished chrome buttons */
 html[data-skin="mirror"] .btn.primary, html[data-skin="mirror"] .boost-grid button.on {
-  background: linear-gradient(180deg, #ffffff 0%, #dfe6f1 40%, #9eaabf 52%, #cfd8e6 100%); border-color: #eef2f8; color: #0b0e16;
+  background: linear-gradient(180deg, #ffffff 0%, #e8e4ef 40%, #aba6bc 52%, #dbd6e3 100%); border-color: #f3f0f7; color: #100c14;
   box-shadow: -2px 0 10px rgba(255, 111, 181, .22), 2px 0 10px rgba(111, 227, 255, .22), inset 0 1px 0 #ffffff; }
-html[data-skin="mirror"] .btn.primary:hover { background: linear-gradient(180deg, #ffffff 0%, #eef2f8 45%, #b8c3d4 55%, #e2e8f2 100%); }
+html[data-skin="mirror"] .btn.primary:hover { background: linear-gradient(180deg, #ffffff 0%, #f3f0f7 45%, #c3bccd 55%, #e9e4ee 100%); }
 /* a thread of split light under the top bar */
 html[data-skin="mirror"] .topbar::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 2px; pointer-events: none;
   background: linear-gradient(90deg, transparent, #6fe3ff 18%, #a98bff 42%, #ff8fd8 62%, #ffd27a 80%, transparent); opacity: .8; }

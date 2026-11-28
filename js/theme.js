@@ -13,7 +13,7 @@ export const SKINS = [
   { id: 'steel', name: 'Blood & Steel', mode: 'dark', color: '#111316', note: 'Blades, blood and sharp edges' },
   { id: 'frost', name: 'Frost', mode: 'light', color: '#f1f7fb', note: 'Ice, rime and snow' },
   { id: 'blast', name: 'Blastworks', mode: 'dark', color: '#1a1b1c', note: 'Iron, scrap, junk crafting and explosions' },
-  { id: 'mirror', name: 'Mirrorshard', mode: 'dark', color: '#0f1219', note: 'Shattered mirrors, glass and fractured reality' },
+  { id: 'mirror', name: 'Mirrorshard', mode: 'dark', color: '#11101a', note: 'Shattered mirrors, glass and fractured reality' },
   { id: 'clockwork', name: 'Clockwork', mode: 'dark', color: '#17110b', note: 'Brass and cogs, and the threads of Fate' },
 ];
 const saved = () => { try { return localStorage.getItem(KEY); } catch (e) { return null; } };
