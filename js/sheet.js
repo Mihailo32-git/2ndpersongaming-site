@@ -25,7 +25,7 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const main = $('#main');
 
 const db = await new DB({ base: 'data/' }).init();
-await db.load(['equipment']);
+await db.load(['equipment', 'item-actions']);
 const engine = new Engine(db);
 const store = await new Store().init();
 
@@ -404,13 +404,14 @@ function actionGroups() {
       skill.push({ rec, head: g.label, headRank: g.rank, headTotal: g.total, trainedOnly: !!info.trained, cant, total: g.total, attack: (rec.traits || []).includes('attack') });
     }
   }
-  // Special: from class features, feats, archetypes, ancestry and items
+  // Special: from class features, feats, archetypes, ancestry and items (their own actions, and what equipped gear can be activated for)
   const seen = new Set();
   const aRefs = limitedActionRefs(ch);
   const limited = (rec) => !!effectiveFreq(rec, ch) && !isActionDup(rec, aRefs);
   const special = [...ch.actions.map((a) => ({ rec: a.rec, src: a.source || '' })),
     ...ch.feats.filter((f) => (f.rec.action && f.rec.action !== 'passive') || limited(f.rec)).map((f) => ({ rec: f.rec, slot: f.slot, src: f.slot ? `${f.slot.label.replace(/ feat$/, '')} ${f.slot.level}` : f.source || 'Feat' })),
-    ...ch.features.filter((f) => (f.rec.action && f.rec.action !== 'passive') || limited(f.rec)).map((f) => ({ rec: f.rec, src: f.source && f.source !== f.rec.name ? f.source : 'Class feature' }))]
+    ...ch.features.filter((f) => (f.rec.action && f.rec.action !== 'passive') || limited(f.rec)).map((f) => ({ rec: f.rec, src: f.source && f.source !== f.rec.name ? f.source : 'Class feature' })),
+    ...(ch.itemActions || []).map((a) => ({ rec: a.rec, src: a.source && a.source !== a.rec.name ? a.source : 'Activate' }))]
     .filter((x) => !SKILL_ACTIONS[x.rec.slug] && !['basic', 'exploration', 'downtime'].includes(x.rec.grp) && !seen.has(x.rec.slug) && seen.add(x.rec.slug))
     .map((x) => ({ ...x, head: originOf(x) }));
   return { basic, skill, special };
@@ -545,7 +546,7 @@ TAB_RENDER.actions = (el) => {
     $('[data-usable]', el).hidden = actF.tab !== 'skill';
     const items = groups[actF.tab].filter(pass);
     if (!items.length) {
-      list.innerHTML = `<p class="muted small act-empty">${actF.tab === 'fav' && !groups.fav.length ? 'No favorites yet. Tap ☆ in the corner of an action to keep it here.' : actF.tab === 'special' && !groups.special.length ? 'No special actions yet — they come from your class, feats, archetypes and ancestry.' : 'Nothing matches these filters.'}</p>`;
+      list.innerHTML = `<p class="muted small act-empty">${actF.tab === 'fav' && !groups.fav.length ? 'No favorites yet. Tap ☆ in the corner of an action to keep it here.' : actF.tab === 'special' && !groups.special.length ? 'No special actions yet — they come from your class, feats, archetypes, ancestry and equipped items.' : 'Nothing matches these filters.'}</p>`;
       return;
     }
     const heads = [];

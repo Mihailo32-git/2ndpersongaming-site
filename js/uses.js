@@ -62,6 +62,7 @@ export function limitedList(ch, state) {
   for (const f of ch.feats || []) add(f.rec);
   for (const f of ch.features || []) add(f.rec);
   for (const a of ch.actions || []) add(a.rec);
+  for (const a of ch.itemActions || []) add(a.rec);
   return out.sort((a, b) => a.tier - b.tier || a.name.localeCompare(b.name));
 }
 /** Innate spells cast once a day: [{name, ref, rank, used}] (cantrips left out). */

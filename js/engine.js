@@ -10,7 +10,7 @@ import { evaluate } from './expr.js';
 import { checkAll } from './prereq.js';
 import { refOf } from './data.js';
 import { CASTERS, buildSpellcasting } from './casting.js';
-import { runeSlots } from './runes.js';
+import { runeSlots, runeKind, runeRef } from './runes.js';
 
 export const BOOST_LEVELS = [5, 10, 15, 20];
 const FEAT_PACKS = ['feats', 'classfeatures', 'ancestryfeatures'];
@@ -313,6 +313,32 @@ export class Engine {
     this._attributes(ch);
     this._proficiencies(ch);
     return ch;
+  }
+
+  /** What equipped gear lets you do (Activate—Inked Safeguard…): worn items (invested, if they need it), wielded weapons,
+   *  shields and held items, worn armor, and the property runes etched on them. [{rec, source}]; empty until the sheet has
+   *  loaded the item-actions data. */
+  _itemActions(ch) {
+    const db = this.db, out = [], seen = new Set();
+    if (!db.has('item-actions')) return out;
+    const add = (rec, source) => {
+      for (const slug of (rec && rec.iacts) || []) {
+        const a = db.get('@item-actions/' + slug);
+        if (a && !seen.has(a.slug)) { seen.add(a.slug); out.push({ rec: a, source }); }
+      }
+    };
+    for (const it of ch.inventory || []) {
+      if (!it.equipped || !it.rec) continue;
+      if ((it.rec.traits || []).includes('invested') && !it.invested) continue;
+      add(it.rec, it.rec.name);
+      const kind = runeKind(it.rec), table = kind && db.runeData ? db.runeData[kind] : null;
+      if (!table || !Array.isArray(it.runes)) continue;
+      for (const slug of it.runes.slice(0, runeSlots(it))) {
+        const ref = table[slug] && runeRef(db, table[slug]);
+        if (ref) add(db.get(ref), `${table[slug].name} rune · ${it.rec.name}`);
+      }
+    }
+    return out;
   }
 
   _grant(ch, ref, parentKey, sourceName, depth, keyOverride) {
@@ -1179,6 +1205,7 @@ export class Engine {
     // Items for display
     ch.features = ch.items.filter((i) => i.pack === 'classfeatures' || i.pack === 'ancestryfeatures');
     ch.actions = ch.items.filter((i) => i.pack === 'actions');
+    ch.itemActions = this._itemActions(ch);
     ch.pending = ch.choices.filter((c) => c.value === null);
     ch.ownedSlugs = new Set(ch.items.map((i) => i.rec.slug));
     ch.ownedNames = new Set(ch.items.map((i) => i.rec.name.toLowerCase()));

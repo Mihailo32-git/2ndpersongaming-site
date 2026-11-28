@@ -84,7 +84,7 @@ export function originOf(x) {
   if (slotType === 'skill') return 'Skill feats';
   if (slotType === 'general') return 'General feats';
   if (r.grp === 'background' || r._pack === 'backgrounds') return 'Background';
-  if (r._pack === 'equipment' || r.grp === 'equipment') return 'Items';
+  if (r._pack === 'equipment' || r._pack === 'item-actions' || r.grp === 'equipment') return 'Items';
   if (slotType === 'class' || r._pack === 'classfeatures' || r.grp === 'class') return 'Class';
   if (r._pack === 'feats') return r.cat === 'skill' ? 'Skill feats' : r.cat === 'general' ? 'General feats' : r.cat === 'ancestry' ? 'Ancestry & heritage' : r.cat === 'class' ? 'Class' : 'Other';
   return 'Other';

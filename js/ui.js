@@ -100,6 +100,10 @@ function metaLines(rec) {
     if (rec.type === 'armor') row('Armor', `AC +${rec.ac || 0}, Dex cap ${rec.dexCap ?? '—'}, Str ${rec.str ? '+' + rec.str : '—'}, check ${rec.checkPen || 0}, speed ${rec.speedPen || 0} ft.`);
     if (rec.type === 'shield') row('Shield', `AC +${rec.shieldAc}, Hardness ${rec.hardness}, HP ${rec.hp}`);
   }
+  if (p === 'item-actions') {
+    row('Item', `<a class="ref" data-ref="equipment/${esc(rec.item)}">${esc(rec.itemName || rec.item)}</a>`);
+    if (rec.cost) row('Activate', esc(rec.cost));
+  }
   if (p === 'ancestries') row('Stats', `HP ${rec.hp} · Size ${esc(titleCase(rec.size))} · Speed ${rec.speed} ft.`);
   if (p === 'classes') row('Stats', `HP ${rec.hp} + Con per level · Key ${esc((rec.keyAbility || []).map((a) => a.toUpperCase()).join(' or ') || 'see subclass')}`);
   return rows.join('');
@@ -108,7 +112,7 @@ function metaLines(rec) {
 export function headerLine(rec) {
   const lvl = rec.level ?? rec.rank;
   const kind = { feats: 'Feat', classfeatures: 'Feature', ancestryfeatures: 'Feature', spells: (rec.traits || []).includes('cantrip') ? 'Cantrip' : (rec.traits || []).includes('focus') ? 'Focus' : 'Spell',
-    equipment: 'Item', actions: 'Action', conditions: 'Condition', heritages: 'Heritage', backgrounds: 'Background', ancestries: 'Ancestry', classes: 'Class' }[rec._pack === 'creature-spells' ? 'spells' : rec._pack] || 'Effect';
+    equipment: 'Item', 'item-actions': 'Item activation', actions: 'Action', conditions: 'Condition', heritages: 'Heritage', backgrounds: 'Background', ancestries: 'Ancestry', classes: 'Class' }[rec._pack === 'creature-spells' ? 'spells' : rec._pack] || 'Effect';
   return `${kind}${lvl != null && lvl !== '' && rec._pack !== 'conditions' ? ' ' + lvl : ''}`;
 }
 

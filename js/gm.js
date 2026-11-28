@@ -19,7 +19,7 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const main = $('#main');
 
 const db = await new DB({ base: 'data/' }).init();
-await db.load(['equipment', 'creatures', 'creatureBooks', 'conditions']);
+await db.load(['equipment', 'item-actions', 'creatures', 'creatureBooks', 'conditions']);
 await loadRunes(db);
 const engine = new Engine(db);
 const store = await new Store().init();

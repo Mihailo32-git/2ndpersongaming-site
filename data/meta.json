@@ -1,5 +1,5 @@
 {
-    "builtAt": "2026-11-27T21:40:34+00:00",
+    "builtAt": "2026-11-28T13:19:38+00:00",
     "foundryCommit": "0a508ab9",
     "counts": {
         "ancestries": 54,
@@ -17,6 +17,7 @@
         "spell-effects": 553,
         "equipment-effects": 773,
         "deities": 483,
+        "item-actions": 2855,
         "domains": 61,
         "creatures": 6542,
         "creatureBooks": 64,
@@ -45,7 +46,8 @@
         "feat-effects": 8,
         "spell-effects": 8,
         "equipment-effects": 8,
-        "creature-spells": 4
+        "creature-spells": 4,
+        "item-actions": 8
     },
     "classes": [
         "alchemist",
